@@ -18,8 +18,9 @@ async def handle_echo(reader, writer):
         data = await reader.read(100)
         message = data.decode()
         addr = writer.get_extra_info('peername')
+        sock = writer.get_extra_info('socket')
 
-        print(f"Received {message!r} from {addr!r}")
+        print(f"Received {message!r} from {addr!r} : {sock.getsockname()!r}")
 
         print(f"Send: {message!r}")
         writer.write(data)
