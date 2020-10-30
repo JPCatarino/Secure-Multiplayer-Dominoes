@@ -1,13 +1,28 @@
 #!/usr/bin/env python3
 import socket
 import argparse
+import asyncio
 
-from random import randint
-
-CLIENT_HOST = socket.gethostbyname(socket.gethostname())
-CLIENT_PORT = randint(10000, 50000)  # TODO find a better way to attribute a port to a client
 SERVER_HOST = None
 SERVER_PORT = None
+
+
+async def tcp_echo_client(message):
+    reader, writer = await asyncio.open_connection(
+        SERVER_HOST, SERVER_PORT)
+    counter = 0
+    while counter != 3:
+        input()
+        print(f'Send: {message!r}')
+        writer.write(message.encode())
+
+        data = await reader.read(100)
+        print(f'Received: {data.decode()!r}')
+        counter+=1
+
+    print('Close the connection')
+    writer.close()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -19,15 +34,4 @@ if __name__ == "__main__":
     SERVER_HOST = args.ip
     SERVER_PORT = args.port
 
-    server_address = (SERVER_HOST, SERVER_PORT)
-
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.connect(server_address)
-
-        try:
-            message = b'Hello World!'
-            sock.sendall(message)
-
-        finally:
-            sock.close()
-
+    asyncio.run(tcp_echo_client('Hello World!'))

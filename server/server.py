@@ -1,34 +1,45 @@
 #!/usr/bin/env python3
 import socket
+import asyncio
 
 HOST = socket.gethostbyname(socket.gethostname())
 PORT = 12345
 
-
-def message_handler(new_message, address):
-    print(address)
-    print(new_message)
+numberOfClients = 0
 
 
-if __name__ == "__main__":
-    server_address = (HOST, PORT)
-    print(server_address)
+async def handle_echo(reader, writer):
+    counter = 0
+    global numberOfClients
+    numberOfClients += 1
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(server_address)
-        sock.listen()
-        conn, addr = sock.accept()
+    while counter != 3:
+        print(numberOfClients)
+        data = await reader.read(100)
+        message = data.decode()
+        addr = writer.get_extra_info('peername')
 
-        # For now the server closes after one connection, this behaviour shall change later
-        with conn:
-            try:
-                while True:
-                    data = conn.recv(1024)
+        print(f"Received {message!r} from {addr!r}")
 
-                    if data:
-                        message_handler(data, addr)
-                    else:
-                        break
+        print(f"Send: {message!r}")
+        writer.write(data)
+        await writer.drain()
+        counter += 1
 
-            finally:
-                conn.close()
+    print("Close the connection")
+    writer.close()
+    numberOfClients -= 1
+
+
+async def main():
+    server = await asyncio.start_server(
+        handle_echo, HOST, PORT)
+
+    addr = server.sockets[0].getsockname()
+    print(f'Serving on {addr}')
+
+    async with server:
+        await server.serve_forever()
+
+
+asyncio.run(main())
