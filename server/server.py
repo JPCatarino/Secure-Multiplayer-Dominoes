@@ -1,10 +1,10 @@
-from game.deck_utils import *
+from dominoes.deck_utils import *
 import socket
 import select
 import sys
 import queue
 import pickle
-from game.game import Game
+from dominoes.game import Game
 import signal
 import utils.Colors as Colors
 import time

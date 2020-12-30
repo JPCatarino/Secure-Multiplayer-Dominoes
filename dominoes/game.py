@@ -1,4 +1,4 @@
-from game.deck_utils import Deck,Player
+from dominoes.deck_utils import Deck,Player
 
 class Game:
     def __init__(self,max_players):

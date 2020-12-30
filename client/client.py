@@ -1,10 +1,13 @@
 import socket
-import sys
+import sys, os
 import pickle
 
 import string
 import random
-from game.deck_utils import Player
+
+#sys.path.append(os.path.abspath(os.path.join('..')))
+
+from dominoes.deck_utils import Player
 from utils import Colors as Colors
 
 
