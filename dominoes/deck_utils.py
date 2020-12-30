@@ -1,5 +1,8 @@
 import random
 
+from security import generateKey as keygen
+from security import hashFunctions
+
 
 class Player:
     def __init__(self, name, socket, pieces_per_player=None):
@@ -127,10 +130,12 @@ class SubPiece:
 
 class Deck:
     deck = []
+    pseudo_deck = []
+    pseudo_table = []
 
     def __init__(self, pieces_per_player=5):
         self.deck = [Piece(x, y) for x in range(7) for y in range(x, 7)]
-
+        random.shuffle(self.deck)
         self.npieces = len(self.deck)
         self.pieces_per_player = pieces_per_player
         self.in_table = []
@@ -140,6 +145,15 @@ class Deck:
         for piece in self.deck:
             a += str(piece)
         return a
+
+    def generate_pseudonymized_deck(self):
+        for tile in self.deck:
+            tile_index = self.deck.index(tile)
+            tile_key = keygen.generate_key(keygen.get_random_alphanumeric_string(8))
+            self.pseudo_table.append(tile_key)
+            tile_hash = hashFunctions.get_sha256_digest_from_list([str.encode(str(tile_index)), tile_key, str.encode(str(tile))])
+            pseudo_tuple = (tile_index, tile_hash)
+            self.pseudo_deck.append(pseudo_tuple)
 
     def toJson(self):
         return {"npieces": self.npieces, "pieces_per_player": self.pieces_per_player, "in_table": self.in_table,

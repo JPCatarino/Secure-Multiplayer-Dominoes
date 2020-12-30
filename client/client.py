@@ -5,7 +5,7 @@ import pickle
 import string
 import random
 
-# Uncomment this if you're having trouble with module not found 
+# Uncomment this if you're having trouble with module not found
 #sys.path.append(os.path.abspath(os.path.join('.')))
 #sys.path.append(os.path.abspath(os.path.join('..')))
 
