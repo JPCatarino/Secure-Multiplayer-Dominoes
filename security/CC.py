@@ -1,24 +1,10 @@
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import padding
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from PyKCS11.LowLevel import CKA_CLASS, CKO_PRIVATE_KEY, CKA_LABEL, CKM_SHA1_RSA_PKCS, CKO_CERTIFICATE, CKA_VALUE, CKO_PUBLIC_KEY
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import load_der_public_key
 from cryptography.hazmat.primitives.asymmetric import (padding, rsa, utils)
 from PyKCS11 import *
 
-import random
-import base64
-import hashlib
-import sys
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-import os
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from cryptography.hazmat.primitives import padding
 pkcs11 = PyKCS11Lib()
