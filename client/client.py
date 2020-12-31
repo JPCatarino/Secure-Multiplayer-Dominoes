@@ -6,8 +6,8 @@ import string
 import random
 
 # Uncomment this if you're having trouble with module not found
-#sys.path.append(os.path.abspath(os.path.join('.')))
-#sys.path.append(os.path.abspath(os.path.join('..')))
+sys.path.append(os.path.abspath(os.path.join('.')))
+sys.path.append(os.path.abspath(os.path.join('..')))
 
 from dominoes.deck_utils import Player
 from utils import Colors as Colors

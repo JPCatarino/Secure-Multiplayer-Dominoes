@@ -4,6 +4,16 @@ import argparse
 import socket
 import selectors
 import types
+import os
+import traceback
+
+# Uncomment this if you're having trouble with module not found
+sys.path.append(os.path.abspath(os.path.join('.')))
+sys.path.append(os.path.abspath(os.path.join('..')))
+
+from libs.libserver import Message
+
+
 
 sel = selectors.DefaultSelector()
 
@@ -12,53 +22,42 @@ def establish_connection(host, port):
     PORT = port
 
     lsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    lsock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     lsock.bind((SERVER_HOST, PORT))
     lsock.listen()
-    print('Serving on ', (SERVER_HOST, PORT))
+    print("listening on", (SERVER_HOST, PORT))
     lsock.setblocking(False)
-    sel.register(lsock, selectors.EVENT_READ, data = None)
+    sel.register(lsock, selectors.EVENT_READ | selectors.EVENT_WRITE, data=None)
 
     try:
         while True:
             events = sel.select(timeout=None)
             for key, mask in events:
-                # Accept the listening socket (data is None)
                 if key.data is None:
                     accept_wrapper(key.fileobj)
-                # Data available. Service the connection
                 else:
-                    service_connection(key, mask)
+                    message = key.data
+                    try:
+                        message.process_events(mask)
+                    except Exception:
+                        print(
+                            "main: error: exception for",
+                            f"{message.addr}:\n{traceback.format_exc()}",
+                        )
+                        message.close()
     except KeyboardInterrupt:
-        print('Interrupted')
+        print("caught keyboard interrupt, exiting")
     finally:
         sel.close()
 
 
 def accept_wrapper(sock):
     conn, addr = sock.accept()
-    print('Connection from' , addr,  'accepted')
+    print("accepted connection from", addr)
     conn.setblocking(False)
-    data = types.SimpleNamespace(addr=addr, int=b'', outb=b'')
-    events = selectors.EVENT_READ | selectors.EVENT_WRITE
-    sel.register(conn, events, data=data)
+    message = Message(sel, conn, addr)
+    sel.register(conn, selectors.EVENT_READ | selectors.EVENT_WRITE, data=message)
 
-def service_connection(key, mask):
-    sock = key.fileobj
-    data = key.data
-
-    if mask & selectors.EVENT_READ:
-        recv_data = sock.recv(1024)
-        if recv_data:
-            data.outb += recv_data
-        else:
-            print('Closing connection to ', data.addr)
-            sel.unregister(sock)
-            sock.close()
-    if mask & selectors.EVENT_WRITE:
-        if data.outb:
-            print('Echoing', repr(data.outb), 'to' , data.addr)
-            sent = sock.send(data.outb)
-            data.outb = data.outb[sent:]
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
