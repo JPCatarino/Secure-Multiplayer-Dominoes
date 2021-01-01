@@ -295,7 +295,7 @@ class Message:
                     content = self._handle_pass_play(c_player)
                     self._set_selector_events_mask("r")
             else:
-                msg = {"action": "wait", "msg": Colors.BRed + "Not Your Turn" + Colors.Color_Off}
+                content = {"action": "wait", "msg": Colors.BRed + "Not Your Turn" + Colors.Color_Off}
 
         response = {
             "content_bytes": self._pickle_encode(content),
