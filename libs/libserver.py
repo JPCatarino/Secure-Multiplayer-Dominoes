@@ -5,6 +5,7 @@ import io
 import struct
 import os
 import time
+import pickle
 
 sys.path.append(os.path.abspath(os.path.join('.')))
 sys.path.append(os.path.abspath(os.path.join('..')))
@@ -67,7 +68,7 @@ class Message:
         data = self._recv_buffer
         self._recv_buffer = b""
         print("Processing request")
-        self.request = self._json_decode(data, "utf-8")
+        self.request = self._pickle_decode(data)
         self._set_selector_events_mask("w")
 
     def create_response(self):
@@ -120,7 +121,7 @@ class Message:
         try:
             # Should be ready to write
             buffer = b""
-            buffer += self._json_encode(message, "utf-8")
+            buffer += self._pickle_encode(message)
             self.sock.send(buffer)
         except BlockingIOError:
             # Resource temporarily unavailable (errno EWOULDBLOCK)
@@ -134,6 +135,12 @@ class Message:
         obj = json.load(tiow)
         tiow.close()
         return obj
+
+    def _pickle_encode(self, obj):
+        return pickle.dumps(obj)
+
+    def _pickle_decode(self, pickle_bytes):
+        return pickle.loads(pickle_bytes)
 
     def _create_message(self, content_bytes):
         message = content_bytes
@@ -158,7 +165,8 @@ class Message:
                     print("User {} tried to join a full game".format(self.request.get("msg")))
                     return msg
                 else:
-                    self.game.addPlayer(self.request.get("msg"), self.sock, self.game.deck.pieces_per_player)  # Adding player
+                    self.game.addPlayer(self.request.get("msg"), self.sock,
+                                        self.game.deck.pieces_per_player)  # Adding player
                     msg = {"action": "new_player", "msg": "New Player " + Colors.BGreen + self.request.get("msg")
                                                           + Colors.Color_Off + " registered in game",
                            "nplayers": self.game.nplayers, "game_players": self.game.max_players}
@@ -180,6 +188,79 @@ class Message:
                 print("User {} tried to join a game he was already in".format(self.request.get("msg")))
                 return msg
 
+    def _handle_start_game(self):
+        self.game.deck.generate_pseudonymized_deck()
+        msg = {"action": "host_start_game",
+               "msg": Colors.BYellow + "The Host started the game" + Colors.Color_Off}
+        self.send_all(msg)
+        return msg
+
+    def _handle_ready_to_play(self):
+        msg = {"action": "host_start_game",
+               "msg": Colors.BYellow + "The Host started the game" + Colors.Color_Off}
+        self.send_all(msg)
+        return msg
+
+    def _handle_get_game_properties(self):
+        msg = {"action": "rcv_game_properties"}
+        msg.update(self.game.toJson())
+        return msg
+
+    def _handle_get_piece(self, player):
+        self.game.deck.deck = self.request.get("deck")
+        player.updatePieces(1)
+        if not self.game.started:
+            print("player pieces ", player.num_pieces)
+            print("ALL-> ", self.game.allPlayersWithPieces())
+            self.game.nextPlayer()
+            if self.game.allPlayersWithPieces():
+                self.game.started = True
+                self.game.next_action = "play"
+        msg = {"action": "rcv_game_properties"}
+        msg.update(self.game.toJson())
+        self.send_all(msg)
+        return msg
+
+    def _handle_play_piece(self, player):
+        next_p = self.game.nextPlayer()
+        if self.request.get("piece") is not None:
+            player.nopiece = False
+            player.updatePieces(-1)
+            if self.request.get("edge") == 0:
+                self.game.deck.in_table.insert(0, self.request.get("piece"))
+            else:
+                self.game.deck.in_table.insert(len(self.game.deck.in_table), self.request.get("piece"))
+
+        print("player pieces ", player.num_pieces)
+        print("player " + player.name + " played " + str(self.request.get("piece")))
+        print("in table -> " + ' '.join(map(str, self.game.deck.in_table)) + "\n")
+        print("deck -> " + ' '.join(map(str, self.game.deck.deck)) + "\n")
+        if self.request.get("win"):
+            if player.checkifWin():
+                print(Colors.BGreen + " WINNER " + player.name + Colors.Color_Off)
+                msg = {"action": "end_game", "winner": player.name}
+        else:
+            msg = {"action": "rcv_game_properties"}
+        msg.update(self.game.toJson())
+        self.send_all(msg)
+        return msg
+
+    def _handle_pass_play(self, player):
+        self.game.nextPlayer()
+        # If the player passed the previous move
+        if player.nopiece:
+            print("No piece END")
+            msg = {"action": "end_game", "winner": Colors.BYellow + "TIE" + Colors.Color_Off}
+        # Update the variable nopiece so that the server can know if the player has passed the previous move
+        else:
+            print("No piece")
+            player.nopiece = True
+            msg = {"action": "rcv_game_properties"}
+            msg.update(self.game.toJson())
+
+        self.send_all(msg)
+        return msg
+
     def _create_response_json_content(self):
         # ADD HERE MORE MESSSAGES
         print(self.request)
@@ -190,14 +271,34 @@ class Message:
         elif action == "req_login":
             content = self._handle_login()
             self._set_selector_events_mask("r")
-        elif action == "Ready to play":
-            print("trying to write")
-            content = {"result": "Waiting for other players"}
+        elif action == "start_game":
+            content = self._handle_start_game()
+            self._set_selector_events_mask("r")
+        elif action == "ready_to_play":
+            content = self._handle_ready_to_play()
+            self._set_selector_events_mask("r")
+        elif action == "get_game_properties":
+            content = self._handle_get_game_properties()
             self._set_selector_events_mask("r")
         else:
             content = {"result": f'Error: invalid action "{action}".'}
+        if self.game.isFull():
+            c_player = self.game.currentPlayer()
+            if self.sock == c_player.socket:
+                if action == "get_piece":
+                    content = self._handle_get_piece(c_player)
+                    self._set_selector_events_mask("r")
+                elif action == "play_piece":
+                    content = self._handle_play_piece(c_player)
+                    self._set_selector_events_mask("r")
+                elif action == "pass_play":
+                    content = self._handle_pass_play(c_player)
+                    self._set_selector_events_mask("r")
+            else:
+                msg = {"action": "wait", "msg": Colors.BRed + "Not Your Turn" + Colors.Color_Off}
+
         response = {
-            "content_bytes": self._json_encode(content, "utf-8"),
+            "content_bytes": self._pickle_encode(content),
         }
         return response
 
