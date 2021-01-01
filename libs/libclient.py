@@ -1,15 +1,25 @@
-import sys
+import sys, os
 import selectors
 import json
 import io
 import struct
+import string
+import random
+
+sys.path.append(os.path.abspath(os.path.join('.')))
+sys.path.append(os.path.abspath(os.path.join('..')))
+
+from dominoes.deck_utils import Player
+from utils import Colors as Colors
+
 
 
 class Message:
-    def __init__(self, selector, sock, addr, request):
+    def __init__(self, selector, sock, addr, request, player):
         self.selector = selector
         self.sock = sock
         self.addr = addr
+        self.player = player
         self.request = request
         self._recv_buffer = b""
         self._send_buffer = b""
@@ -60,7 +70,10 @@ class Message:
             self.sock = None
 
     def queue_request(self):
-        content = self.request["content"]
+        if "content" in self.request:
+            content = self.request["content"]
+        elif "action" in self.request:
+            content = self.request
         req = {
             "content_bytes": self._json_encode(content, "utf-8"),
         }
@@ -73,6 +86,7 @@ class Message:
         self.response = self._json_decode(data, "utf-8")
         print("received response", repr(self.response), "from", self.addr)
         self._process_response_json_content()
+        self._recv_buffer = b""
 
 #-----------------------------------------------------------Private Methods------------------------------------------------------------------
 
@@ -129,11 +143,29 @@ class Message:
     def _create_request(self, action):
         return dict(content=dict(action=action))
 
+    def _handle_login(self):
+        nickname = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))  # input(data["msg"])
+        print("Your name is " + Colors.BBlue + nickname + Colors.Color_Off)
+        msg = {"action": "req_login", "msg": nickname}
+        self.player = Player(nickname, self.sock)
+        return msg
+
+    def _handle_you_host(self):
+        self.player.host = True
+
+    def _handle_new_player(self):
+        print(self.response.get("msg"))
+        print("There are " + str(self.response.get("nplayers")) + "\\" + str(self.response.get("game_players")))
+
     def _process_response_json_content(self):
         #ADD CLIENT ACTIONS TO MESSAGES HERE
         content = self.response
-        result = content.get("result")
-        if(result == "connected"):
-            response = self._create_request("Ready to play")
-            message = Message(self.selector, self.sock, self.addr, response)
+        action = content.get("action")
+        if action == "login":
+            response = self._handle_login()
+            message = Message(self.selector, self.sock, self.addr, response, self.player)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "you_host":
+            self._handle_you_host()
+        elif action == "new_player":
+            self._handle_new_player()

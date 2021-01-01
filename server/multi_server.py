@@ -12,10 +12,12 @@ sys.path.append(os.path.abspath(os.path.join('.')))
 sys.path.append(os.path.abspath(os.path.join('..')))
 
 from libs.libserver import Message
-
-
+from dominoes.game import Game
+import utils.Colors as Colors
 
 sel = selectors.DefaultSelector()
+player_list = []
+
 
 def establish_connection(host, port):
     SERVER_HOST = host
@@ -53,9 +55,11 @@ def establish_connection(host, port):
 
 def accept_wrapper(sock):
     conn, addr = sock.accept()
-    print("accepted connection from", addr)
+    print(Colors.BRed + "A new client connected -> " + Colors.BGreen + "{}".format(
+        addr) + Colors.Color_Off)
     conn.setblocking(False)
-    message = Message(sel, conn, addr)
+    message = Message(sel, conn, addr, GAME, player_list)
+    player_list.append(message)
     sel.register(conn, selectors.EVENT_READ | selectors.EVENT_WRITE, data=message)
 
 
@@ -63,10 +67,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--ip', type=str, help='Server IP', required=True)
     parser.add_argument('-p', '--port', type=int, help='Server Port', required=True)
+    parser.add_argument('-np', '--num_players', type=int, help='Number of players', required=False, nargs='?', const=3)
     args = parser.parse_args()
 
-    
     SERVER_HOST = args.ip
     SERVER_PORT = args.port
+
+    if args.num_players is not None:
+        GAME = Game(args.num_players)
+        nplayers = args.num_players
+    else:
+        GAME = Game(4)
+        nplayers = args.num_players
 
     establish_connection(SERVER_HOST, SERVER_PORT)

@@ -14,6 +14,7 @@ sys.path.append(os.path.abspath(os.path.join('..')))
 from libs.libclient import Message 
 
 sel = selectors.DefaultSelector()
+PLAYER = None
 
 def start_connections(host, port):
     addr = (host, port)
@@ -22,8 +23,8 @@ def start_connections(host, port):
     sock.setblocking(False)
     sock.connect_ex(addr)
     events = selectors.EVENT_READ | selectors.EVENT_WRITE
-    request = create_request("connect")
-    message = Message(sel, sock, addr, request)
+    request = create_request("hello")
+    message = Message(sel, sock, addr, request, PLAYER)
     sel.register(sock, events, data=message)
 
 def create_request(action):
