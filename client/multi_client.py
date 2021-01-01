@@ -13,6 +13,8 @@ sys.path.append(os.path.abspath(os.path.join('..')))
 
 from libs.libclient import Message 
 
+# Main socket code from https://realpython.com/python-sockets/
+
 sel = selectors.DefaultSelector()
 PLAYER = None
 
@@ -45,7 +47,6 @@ def service_connection():
                         f"{message.addr}:\n{traceback.format_exc()}",
                     )
                     message.close()
-
             if not sel.get_map():
                 break
     except KeyboardInterrupt:

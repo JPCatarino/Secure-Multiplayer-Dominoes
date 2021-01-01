@@ -14,6 +14,8 @@ from dominoes.deck_utils import Player
 from utils import Colors as Colors
 
 
+# Main socket code from https://realpython.com/python-sockets/
+
 class Message:
     def __init__(self, selector, sock, addr, request, player):
         self.selector = selector
