@@ -13,6 +13,8 @@ sys.path.append(os.path.abspath(os.path.join('..')))
 import utils.Colors as Colors
 
 
+# Main socket code from https://realpython.com/python-sockets/
+
 class Message:
     def __init__(self, selector, sock, addr, game, player_list):
         self.selector = selector
