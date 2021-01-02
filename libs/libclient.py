@@ -12,16 +12,18 @@ sys.path.append(os.path.abspath(os.path.join('..')))
 
 from dominoes.deck_utils import Player
 from utils import Colors as Colors
-
+from security.symCiphers import AESCipher
 
 # Main socket code from https://realpython.com/python-sockets/
 
 class Message:
-    def __init__(self, selector, sock, addr, request, player):
+    def __init__(self, selector, sock, addr, request, player, keychain, aes_cipher=None):
         self.selector = selector
         self.sock = sock
         self.addr = addr
         self.player = player
+        self.keychain = keychain
+        self.aes_cipher = aes_cipher
         self.request = request
         self._recv_buffer = b""
         self._send_buffer = b""
@@ -153,14 +155,20 @@ class Message:
     def _handle_login(self):
         nickname = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))  # input(data["msg"])
         print("Your name is " + Colors.BBlue + nickname + Colors.Color_Off)
-        msg = {"action": "req_login", "msg": nickname}
+        msg = {"action": "req_login", "pubkey": self.keychain.exportPubKey(), "msg": nickname}
         self.player = Player(nickname, self.sock)
         return msg
 
     def _handle_you_host(self):
+        aes_secret = self.keychain.decrypt(self.response.get("session_key"))
+        self.aes_cipher = AESCipher(aes_secret)
         self.player.host = True
 
     def _handle_new_player(self):
+        if "session_key" in self.response:
+            aes_secret = self.keychain.decrypt(self.response.get("session_key"))
+            print(aes_secret)
+            self.aes_cipher = AESCipher(aes_secret)
         print(self.response.get("msg"))
         print("There are " + str(self.response.get("nplayers")) + "\\" + str(self.response.get("game_players")))
 
@@ -228,7 +236,7 @@ class Message:
         action = content.get("action")
         if action == "login":
             response = self._handle_login()
-            message = Message(self.selector, self.sock, self.addr, response, self.player)
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "you_host":
             self._handle_you_host()
@@ -237,18 +245,18 @@ class Message:
         elif action == "waiting_for_host":
             if self.player.host:
                 response = self._handle_waiting_for_host_as_host()
-                message = Message(self.selector, self.sock, self.addr, response, self.player)
+                message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.aes_cipher)
                 self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
             else:
                 self._handle_waiting_for_host_as_player()
         elif action == "host_start_game":
             response = self._handle_host_start_game()
-            message = Message(self.selector, self.sock, self.addr, response, self.player)
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "rcv_game_properties":
             response = self._handle_rcv_game_properties()
             if response is not None:
-                message = Message(self.selector, self.sock, self.addr, response, self.player)
+                message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.aes_cipher)
                 self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "end_game":
             self._handle_end_game()

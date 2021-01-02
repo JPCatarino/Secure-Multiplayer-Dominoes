@@ -11,12 +11,14 @@ import os
 sys.path.append(os.path.abspath(os.path.join('.')))
 sys.path.append(os.path.abspath(os.path.join('..')))
 
-from libs.libclient import Message 
+from libs.libclient import Message
+from security.asymCiphers import RSAKeychain
 
 # Main socket code from https://realpython.com/python-sockets/
 
 sel = selectors.DefaultSelector()
 PLAYER = None
+PLAYER_KEYCHAIN = RSAKeychain()
 
 def start_connections(host, port):
     addr = (host, port)
@@ -26,7 +28,7 @@ def start_connections(host, port):
     sock.connect_ex(addr)
     events = selectors.EVENT_READ | selectors.EVENT_WRITE
     request = create_request("hello")
-    message = Message(sel, sock, addr, request, PLAYER)
+    message = Message(sel, sock, addr, request, PLAYER, PLAYER_KEYCHAIN)
     sel.register(sock, events, data=message)
 
 def create_request(action):

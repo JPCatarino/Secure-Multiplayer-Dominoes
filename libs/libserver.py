@@ -11,17 +11,23 @@ sys.path.append(os.path.abspath(os.path.join('.')))
 sys.path.append(os.path.abspath(os.path.join('..')))
 
 import utils.Colors as Colors
+from security.asymCiphers import readPublicKeyFromPEM
+from security.symCiphers import AESCipher
 
 
 # Main socket code from https://realpython.com/python-sockets/
 
 class Message:
-    def __init__(self, selector, sock, addr, game, player_list):
+    def __init__(self, selector, sock, addr, game, player_list, keychain, player_keys_dict):
         self.selector = selector
         self.sock = sock
         self.addr = addr
         self.game = game
+        self.keychain = keychain
         self.player_list = player_list
+        self.player_keys_dict = player_keys_dict
+        self.player_aes = AESCipher()
+        self.player_key = None
         self._recv_buffer = b""
         self._send_buffer = b""
         self.request = None
@@ -154,9 +160,13 @@ class Message:
 
     def _handle_login(self):
         print("User {} requests login, with nickname {}".format(self.sock.getpeername(), self.request.get("msg")))
+        self.player_keys_dict[self.request.get("msg")] = readPublicKeyFromPEM(self.request.get("pubkey"))
+        self.player_key = readPublicKeyFromPEM(self.request.get("pubkey"))
+        print(self.player_aes.secret)
+        encrypted_secret = self.keychain.encrypt(self.player_aes.secret, self.player_key)
         if not self.game.hasHost():  # There is no game for this tabla manager
             self.game.addPlayer(self.request.get("msg"), self.sock, self.game.deck.pieces_per_player)  # Adding host
-            msg = {"action": "you_host", "msg": Colors.BRed + "You are the host of the game" + Colors.Color_Off}
+            msg = {"action": "you_host", "session_key": encrypted_secret,"msg": Colors.BRed + "You are the host of the game" + Colors.Color_Off}
             print("User " + Colors.BBlue + "{}".format(
                 self.request.get("msg")) + Colors.Color_Off + " has created a game, he is the first to join")
             return msg
@@ -177,6 +187,7 @@ class Message:
 
                     # send info to all players
                     self.send_all(msg)
+                    msg["session_key"] = encrypted_secret
 
                     # check if table is full
                     if self.game.isFull():

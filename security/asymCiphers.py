@@ -6,6 +6,10 @@ from Crypto.Signature.pkcs1_15 import PKCS115_SigScheme
 from Crypto.Hash import SHA256
 
 
+def readPublicKeyFromPEM(pem):
+    return RSA.import_key(pem)
+
+
 class RSAKeychain:
     def __init__(self, key_size=2048):
         self.keyPair = RSA.generate(key_size)
