@@ -1,3 +1,5 @@
+# Simple authenticated RSA keychain implementation
+# Based on the examples of the book Practical Cryptography for Developers by Svetlin Nakov
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Signature.pkcs1_15 import PKCS115_SigScheme

@@ -1,3 +1,5 @@
+# Simple authenticated AES implementation
+# Based on the examples of the book Practical Cryptography for Developers by Svetlin Nakov
 from Crypto.Cipher import AES
 import os
 
