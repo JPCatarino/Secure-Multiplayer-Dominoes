@@ -162,7 +162,6 @@ class Message:
         print("User {} requests login, with nickname {}".format(self.sock.getpeername(), self.request.get("msg")))
         self.player_keys_dict[self.request.get("msg")] = readPublicKeyFromPEM(self.request.get("pubkey"))
         self.player_key = readPublicKeyFromPEM(self.request.get("pubkey"))
-        print(self.player_aes.secret)
         encrypted_secret = self.keychain.encrypt(self.player_aes.secret, self.player_key)
         if not self.game.hasHost():  # There is no game for this tabla manager
             self.game.addPlayer(self.request.get("msg"), self.sock, self.game.deck.pieces_per_player)  # Adding host
@@ -284,6 +283,10 @@ class Message:
         elif action == "req_login":
             content = self._handle_login()
             self._set_selector_events_mask("r")
+            response = {
+                "content_bytes": self._pickle_encode(content),
+            }
+            return response
         elif action == "start_game":
             content = self._handle_start_game()
             self._set_selector_events_mask("r")
@@ -319,3 +322,4 @@ class Message:
         for sock in self.player_list:
             if sock is not self:
                 sock.forced_write(msg)
+        time.sleep(0.2)
