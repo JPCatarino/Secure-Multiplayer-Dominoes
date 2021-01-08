@@ -13,6 +13,7 @@ sys.path.append(os.path.abspath(os.path.join('..')))
 from dominoes.deck_utils import Player
 from utils import Colors as Colors
 from security.symCiphers import AESCipher
+from security.asymCiphers import readPublicKeyFromPEM
 
 # Main socket code from https://realpython.com/python-sockets/
 
@@ -24,6 +25,9 @@ class Message:
         self.player = player
         self.keychain = keychain
         self.aes_cipher = aes_cipher
+        self.aes_player_keys = {}
+        self.aes_player_keys_dec = {}
+        self.exchange_aes = None
         self.request = request
         self._recv_buffer = b""
         self._send_buffer = b""
@@ -172,6 +176,41 @@ class Message:
         print(self.response.get("msg"))
         print("There are " + str(self.response.get("nplayers")) + "\\" + str(self.response.get("game_players")))
 
+    def _handle_key_exchange(self):
+        print(self.response.get("msg"))
+        if "session_keys" in self.response:
+            aes_exchange_keys = {}
+            aes_keys = {}
+            players_pub_keys = self.response.get("session_keys")
+            list_of_keys = list(players_pub_keys.keys())
+            for keys in list_of_keys:
+                if keys not in self.player.name:
+                    self.exchange_aes = AESCipher()
+                    encrypted_secret = self.keychain.encrypt(self.exchange_aes.secret, readPublicKeyFromPEM(players_pub_keys[keys]))
+                    aes_exchange_keys[keys] = encrypted_secret
+                    aes_keys[self.player.name] = aes_exchange_keys
+            msg = {"action" : "aes_exchange", "aes_keys": aes_keys}
+        return msg
+
+    def _handle_receiving_aes(self):
+        if "aes_key" in self.response:
+            aes_key = self.response.get("aes_key")
+            print(aes_key)
+            if self.player.name in self.response.get("player_receive"):
+                for key in aes_key:
+                    self.aes_player_keys[key] = aes_key[key]
+                    print(aes_key[key])
+                    print(self.aes_player_keys[key])
+
+    def _handle_keys_exchanged(self):
+        print(self.response.get("msg"))
+        list_of_keys= list(self.aes_player_keys.keys())
+        for key in list_of_keys:
+            aes_secret = self.keychain.decrypt(self.aes_player_keys[key])
+            self.aes_player_keys_dec[key] = AESCipher(aes_secret)
+        msg = {"action" : "finished_setup"}
+        return msg
+
     def _handle_waiting_for_host_as_host(self):
         input(Colors.BGreen + "PRESS ENTER TO START THE GAME" + Colors.Color_Off)
         msg = {"action": "start_game"}
@@ -242,6 +281,16 @@ class Message:
             self._handle_you_host()
         elif action == "new_player":
             self._handle_new_player()
+        elif action == "key_exchange":
+            response = self._handle_key_exchange()
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.aes_cipher)
+            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "receiving_aes":
+            self._handle_receiving_aes()
+        elif action == "keys_exchanged":
+            response = self._handle_keys_exchanged()
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.aes_cipher)
+            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "waiting_for_host":
             if self.player.host:
                 response = self._handle_waiting_for_host_as_host()

@@ -11,6 +11,7 @@ class Game:
         self.init_distribution = True
         self.next_action="get_piece"
         self.started = False
+        self.players_ready = False
         self.all_ready_to_play = False
 
     def checkDeadLock(self):

@@ -19,6 +19,7 @@ import utils.Colors as Colors
 sel = selectors.DefaultSelector()
 player_list = []
 player_keys_dict = {}
+player_keys_dict_PEM = {}
 SERVER_KEYCHAIN = RSAKeychain()
 
 
@@ -61,7 +62,7 @@ def accept_wrapper(sock):
     print(Colors.BRed + "A new client connected -> " + Colors.BGreen + "{}".format(
         addr) + Colors.Color_Off)
     conn.setblocking(False)
-    message = Message(sel, conn, addr, GAME, player_list, SERVER_KEYCHAIN, player_keys_dict)
+    message = Message(sel, conn, addr, GAME, player_list, SERVER_KEYCHAIN, player_keys_dict, player_keys_dict_PEM)
     player_list.append(message)
     sel.register(conn, selectors.EVENT_READ | selectors.EVENT_WRITE, data=message)
 

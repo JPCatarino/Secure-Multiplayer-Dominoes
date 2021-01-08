@@ -18,7 +18,7 @@ from security.symCiphers import AESCipher
 # Main socket code from https://realpython.com/python-sockets/
 
 class Message:
-    def __init__(self, selector, sock, addr, game, player_list, keychain, player_keys_dict):
+    def __init__(self, selector, sock, addr, game, player_list, keychain, player_keys_dict, player_keys_dict_PEM):
         self.selector = selector
         self.sock = sock
         self.addr = addr
@@ -26,13 +26,16 @@ class Message:
         self.keychain = keychain
         self.player_list = player_list
         self.player_keys_dict = player_keys_dict
+        self.player_keys_dict_PEM = player_keys_dict_PEM
         self.player_aes = AESCipher()
+        self.player_nickname = ""
         self.player_key = None
         self._recv_buffer = b""
         self._send_buffer = b""
         self.request = None
         self.response_created = False
         self._response_sent = False
+        self.game_started = False
 
     def process_events(self, mask):
         if mask & selectors.EVENT_READ:
@@ -160,6 +163,8 @@ class Message:
 
     def _handle_login(self):
         print("User {} requests login, with nickname {}".format(self.sock.getpeername(), self.request.get("msg")))
+        self.player_nickname = self.request.get("msg")
+        self.player_keys_dict_PEM[self.request.get("msg")] = self.request.get("pubkey")
         self.player_keys_dict[self.request.get("msg")] = readPublicKeyFromPEM(self.request.get("pubkey"))
         self.player_key = readPublicKeyFromPEM(self.request.get("pubkey"))
         encrypted_secret = self.keychain.encrypt(self.player_aes.secret, self.player_key)
@@ -191,8 +196,7 @@ class Message:
                     # check if table is full
                     if self.game.isFull():
                         print(Colors.BIPurple + "The game is Full" + Colors.Color_Off)
-                        msg = {"action": "waiting_for_host",
-                               "msg": Colors.BRed + "Waiting for host to start the game" + Colors.Color_Off}
+                        msg = {"action" : "key_exchange", "session_keys": self.player_keys_dict_PEM, "msg": "Establishing players secure session"}
                         self.send_all(msg)
                     return msg
             else:
@@ -200,10 +204,30 @@ class Message:
                 print("User {} tried to join a game he was already in".format(self.request.get("msg")))
                 return msg
 
+    def _handle_aes_exchange(self):
+        if "aes_keys" in self.request:
+            aes_keys= self.request.get("aes_keys")
+            list_of_players = aes_keys.keys()
+            for player in list_of_players:
+                for player_send in aes_keys[player]:
+                    temp = {}
+                    temp[player] = aes_keys[player].get(player_send)
+                    msg = {"action" : "receiving_aes", "aes_key" : temp, "player_receive" : player_send}
+                    self.send_all(msg)       
+        msg = {"action": "keys_exchanged",
+            "msg": Colors.BYellow + "Keys have been exchanged" + Colors.Color_Off}
+        self.send_all(msg)
+        return msg
+    
+    def _handle_finish_setup(self):
+        msg = {"action": "waiting_for_host", "msg": Colors.BRed + "Waiting for host to start the game" + Colors.Color_Off}
+        return msg
+
     def _handle_start_game(self):
         self.game.deck.generate_pseudonymized_deck()
         msg = {"action": "host_start_game",
                "msg": Colors.BYellow + "The Host started the game" + Colors.Color_Off}
+        self.game.players_ready = True
         self.send_all(msg)
         return msg
 
@@ -287,6 +311,12 @@ class Message:
                 "content_bytes": self._pickle_encode(content),
             }
             return response
+        elif action == "aes_exchange":
+            content = self._handle_aes_exchange()
+            self._set_selector_events_mask("r")
+        elif action == "finished_setup":
+            content = self._handle_finish_setup()
+            self._set_selector_events_mask("r")
         elif action == "start_game":
             content = self._handle_start_game()
             self._set_selector_events_mask("r")
@@ -298,7 +328,7 @@ class Message:
             self._set_selector_events_mask("r")
         else:
             content = {"result": f'Error: invalid action "{action}".'}
-        if self.game.isFull():
+        if self.game.isFull() & self.game.players_ready:
             c_player = self.game.currentPlayer()
             if self.sock == c_player.socket:
                 if action == "get_piece":
@@ -321,5 +351,11 @@ class Message:
     def send_all(self, msg):
         for sock in self.player_list:
             if sock is not self:
+                sock.forced_write(msg)
+        time.sleep(0.2)
+
+    def send_to_player(self, player_name, msg):
+        for sock in self.player_list:
+            if self.player_nickname in player_name:
                 sock.forced_write(msg)
         time.sleep(0.2)
