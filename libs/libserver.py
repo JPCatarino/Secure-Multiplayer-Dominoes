@@ -14,6 +14,7 @@ sys.path.append(os.path.abspath(os.path.join('..')))
 import utils.Colors as Colors
 from security.asymCiphers import readPublicKeyFromPEM
 from security.symCiphers import AESCipher
+from itertools import combinations
 
 # Main socket code from https://realpython.com/python-sockets/
 
@@ -201,7 +202,25 @@ class Message:
                     # check if table is full
                     if self.game.isFull():
                         print(Colors.BIPurple + "The game is Full" + Colors.Color_Off)
-                        msg = {"action": "key_exchange", "session_keys": self.player_keys_dict_PEM,
+                        sub_player_PEM = {}
+                        pair_dict = {}
+
+                        list_of_keys = self.player_keys_dict_PEM.keys()
+                        list_of_pairs = [comb for comb in combinations(list_of_keys, 2)]
+                        
+                        for pair in list_of_pairs:
+                            if pair[0] not in pair_dict.keys():
+                                pair_dict[pair[0]] = []
+                            pair_dict[pair[0]].append(pair[1])
+                        for key in pair_dict:
+                            for new_keys in pair_dict[key]:
+                                sub_player_PEM[new_keys] = self.player_keys_dict_PEM[new_keys]
+                            msg = {"action": "key_exchange", "session_keys": sub_player_PEM,
+                               "msg": "Establishing players secure session"}
+                            self.send_to_player(key, msg)
+                            sub_player_PEM = {}
+
+                        msg = {"action": "wait",
                                "msg": "Establishing players secure session"}
                         self.send_all(msg)
                     return msg

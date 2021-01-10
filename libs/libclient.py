@@ -187,9 +187,10 @@ class Message:
                 if keys not in self.player.name:
                     self.exchange_aes = AESCipher()
                     encrypted_secret = self.keychain.encrypt(self.exchange_aes.secret,
-                                                             readPublicKeyFromPEM(players_pub_keys[keys]))
+                                                            readPublicKeyFromPEM(players_pub_keys[keys]))
                     aes_exchange_keys[keys] = encrypted_secret
                     aes_keys[self.player.name] = aes_exchange_keys
+                    self.player.aes_player_keys_dec[keys] = self.exchange_aes
             msg = {"action": "aes_exchange", "aes_keys": aes_keys}
         return msg
 
@@ -209,6 +210,11 @@ class Message:
         for key in list_of_keys:
             aes_secret = self.keychain.decrypt(self.player.aes_player_keys[key])
             self.player.aes_player_keys_dec[key] = AESCipher(aes_secret)
+       
+        print(self.player.name)
+        for secret in self.player.aes_player_keys_dec:
+            print("RESULTADO",secret , self.player.aes_player_keys_dec[secret].secret)
+
         msg = {"action": "finished_setup"}
         return msg
 
