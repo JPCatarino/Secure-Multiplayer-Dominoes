@@ -15,6 +15,7 @@ from utils import Colors as Colors
 from security.symCiphers import AESCipher
 from security.asymCiphers import readPublicKeyFromPEM
 
+
 # Main socket code from https://realpython.com/python-sockets/
 
 class Message:
@@ -26,7 +27,6 @@ class Message:
         self.keychain = keychain
         self.aes_cipher = aes_cipher
         self.aes_player_keys = {}
-        self.aes_player_keys_dec = {}
         self.exchange_aes = None
         self.request = request
         self._recv_buffer = b""
@@ -186,10 +186,11 @@ class Message:
             for keys in list_of_keys:
                 if keys not in self.player.name:
                     self.exchange_aes = AESCipher()
-                    encrypted_secret = self.keychain.encrypt(self.exchange_aes.secret, readPublicKeyFromPEM(players_pub_keys[keys]))
+                    encrypted_secret = self.keychain.encrypt(self.exchange_aes.secret,
+                                                             readPublicKeyFromPEM(players_pub_keys[keys]))
                     aes_exchange_keys[keys] = encrypted_secret
                     aes_keys[self.player.name] = aes_exchange_keys
-            msg = {"action" : "aes_exchange", "aes_keys": aes_keys}
+            msg = {"action": "aes_exchange", "aes_keys": aes_keys}
         return msg
 
     def _handle_receiving_aes(self):
@@ -198,17 +199,17 @@ class Message:
             print(aes_key)
             if self.player.name in self.response.get("player_receive"):
                 for key in aes_key:
-                    self.aes_player_keys[key] = aes_key[key]
+                    self.player.aes_player_keys[key] = aes_key[key]
                     print(aes_key[key])
-                    print(self.aes_player_keys[key])
+                    print(self.player.aes_player_keys[key])
 
     def _handle_keys_exchanged(self):
         print(self.response.get("msg"))
-        list_of_keys= list(self.aes_player_keys.keys())
+        list_of_keys = list(self.player.aes_player_keys.keys())
         for key in list_of_keys:
-            aes_secret = self.keychain.decrypt(self.aes_player_keys[key])
-            self.aes_player_keys_dec[key] = AESCipher(aes_secret)
-        msg = {"action" : "finished_setup"}
+            aes_secret = self.keychain.decrypt(self.player.aes_player_keys[key])
+            self.player.aes_player_keys_dec[key] = AESCipher(aes_secret)
+        msg = {"action": "finished_setup"}
         return msg
 
     def _handle_waiting_for_host_as_host(self):
@@ -228,22 +229,98 @@ class Message:
         deck = self.response.get("pseudo_deck")
         new_deck = []
 
-        self.randomized_tuple_mapping = {}
+        self.player.randomized_tuple_mapping = {}
 
         for piece in deck:
             new_cipher = AESCipher()
             ciphertext, nonce, auth_tag = new_cipher.encrypt_aes_gcm(pickle.dumps(piece))
             # If collision exists, generates new key encrypts again
-            while ciphertext in self.randomized_tuple_mapping.values():
+            while ciphertext in self.player.randomized_tuple_mapping.values():
                 new_cipher = AESCipher()
                 ciphertext, nonce, auth_tag = new_cipher.encrypt_aes_gcm(pickle.dumps(piece))
 
-            self.randomized_tuple_mapping[new_cipher.secret] = (ciphertext, nonce, auth_tag)
+            self.player.randomized_tuple_mapping[new_cipher.secret] = (ciphertext, nonce, auth_tag)
             new_deck.append(ciphertext)
 
         random.shuffle(new_deck)
 
         return {'action': 'next_randomization_step', 'deck': new_deck}
+
+    def _handle_start_selection_stage(self):
+        # Picks a piece from the deck or passes, shuffles and sends to another player
+        pseudo_deck = self.response.get("deck")
+        self.player.npieces = self.response.get("pieces_per_player")
+
+        if random.random() < 0.05:
+            random.shuffle(pseudo_deck)
+            self.player.encrypted_hand.append(pseudo_deck.pop())
+        else:
+            random.shuffle(pseudo_deck)
+
+        print("coolio", self.player.aes_player_keys_dec)
+
+        players_nicks = list(self.player.aes_player_keys_dec.keys())
+        player_to_send_deck = random.choice(players_nicks)
+
+        encrypted_message = pickle.dumps({'action': "selection_stage", "deck": pseudo_deck,
+                                          'pieces_per_player': self.response.get("pieces_per_player")})
+
+        encrypted_tuple = self.player.aes_player_keys_dec[player_to_send_deck].encrypt_aes_gcm(encrypted_message)
+
+        print('ciphertext', encrypted_tuple[0])
+        print('nonce', encrypted_tuple[1])
+        print('authtag', encrypted_tuple[2])
+        print('cipherkey', self.player.aes_player_keys_dec[player_to_send_deck].secret)
+
+
+        msg = {'action': 'send_to_player', 'sender': self.player.name, 'rec': player_to_send_deck,
+               'to_send': encrypted_tuple}
+
+        return msg
+
+    def _handle_selection_stage(self):
+        # Picks a piece from the deck or passes, shuffles and sends to another player
+        pseudo_deck = self.response.get("deck")
+        print("coolio", self.player.aes_player_keys_dec)
+        self.player.npieces = self.response.get("pieces_per_player")
+
+        players_nicks = list(self.player.aes_player_keys_dec.keys())
+        print("response", self.response)
+
+        if len(self.player.encrypted_hand) < self.player.npieces:
+            if random.random() < 0.05:
+                self.player.encrypted_hand.append(random.shuffle(pseudo_deck).pop())
+            elif random.random() < 0.50:
+                # Substitute already selected pieces
+                pass
+            else:
+                random.shuffle(pseudo_deck)
+
+        player_to_send_deck = random.choice(players_nicks)
+
+        encrypted_message = pickle.dumps({'action': "selection_stage", "deck": pseudo_deck,
+                             'pieces_per_player': self.response.get("pieces_per_player")})
+
+        encrypted_tuple = self.player.aes_player_keys_dec[player_to_send_deck].encrypt_aes_gcm(encrypted_message)
+
+
+        msg = {'action': 'send_to_player', 'sender': self.player.name, 'rec': player_to_send_deck,
+               'to_send': encrypted_tuple}
+
+        return msg
+
+    def _handle_secret_message(self):
+        cipher = self.player.aes_player_keys_dec[self.response.get('sender')]
+        encrypted_tuple = self.response.get('msg')
+
+        print('ciphertext', encrypted_tuple[0])
+        print('nonce', encrypted_tuple[1])
+        print('authtag', encrypted_tuple[2])
+        print('cipherkey', cipher.secret)
+
+        deciphered_msg = cipher.decrypt_aes_gcm(encrypted_tuple)
+
+        print("decifrado", deciphered_msg)
 
     def _handle_rcv_game_properties(self):
         self.player.nplayers = self.response.get("nplayers")
@@ -294,9 +371,12 @@ class Message:
         # ADD CLIENT ACTIONS TO MESSAGES HERE
         content = self.response
         action = content.get("action")
+        if action == "secret_message":
+            self._handle_secret_message()
         if action == "login":
             response = self._handle_login()
-            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.aes_cipher)
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+                              self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "you_host":
             self._handle_you_host()
@@ -304,33 +384,49 @@ class Message:
             self._handle_new_player()
         elif action == "key_exchange":
             response = self._handle_key_exchange()
-            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.aes_cipher)
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+                              self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "receiving_aes":
             self._handle_receiving_aes()
         elif action == "keys_exchanged":
             response = self._handle_keys_exchanged()
-            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.aes_cipher)
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+                              self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "waiting_for_host":
             if self.player.host:
                 response = self._handle_waiting_for_host_as_host()
-                message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.aes_cipher)
+                message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+                                  self.aes_cipher)
                 self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
             else:
                 self._handle_waiting_for_host_as_player()
         elif action == "host_start_game":
             response = self._handle_host_start_game()
-            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.aes_cipher)
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+                              self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "randomization_stage":
             response = self._handle_randomization_stage()
-            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.aes_cipher)
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+                              self.aes_cipher)
+            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "start_selection_stage":
+            response = self._handle_start_selection_stage()
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+                              self.aes_cipher)
+            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "selection_stage":
+            response = self._handle_selection_stage()
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+                              self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "rcv_game_properties":
             response = self._handle_rcv_game_properties()
             if response is not None:
-                message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.aes_cipher)
+                message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+                                  self.aes_cipher)
                 self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "end_game":
             self._handle_end_game()

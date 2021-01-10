@@ -4,6 +4,7 @@ import json
 import io
 import struct
 import os
+import random
 import time
 import pickle
 
@@ -256,10 +257,23 @@ class Message:
             return msg_two
         else:
             # If randomization ended, skip to next stage
+            #msg_one = {"action": "start_selection_stage", "deck": self.game.deck.pseudo_deck,
+            #           "pieces_per_player": self.game.deck.pieces_per_player}
+            #msg_two = {"action": "wait", "msg": Colors.BYellow + "Selection stage will start" + Colors.Color_Off}
             msg = {"action": "host_start_game",
                    "msg": Colors.BYellow + "The Host started the game" + Colors.Color_Off}
+            #self.send_all(msg_two)
+            #players_to_send = list(player_messages.keys())
+            #random.shuffle(players_to_send)
+            #self.send_to_player(players_to_send.pop(), msg_one)
             self.send_all(msg)
             return msg
+
+    def _handle_send_to_player(self):
+        msg_to_send = {'action': 'secret_message', 'sender': self.request.get('sender'),
+                       'msg': self.request.get('to_send')}
+        self.send_to_player(self.request.get('rec'), msg_to_send)
+        return {"action": 'wait', 'msg': Colors.BGreen + "Message sent" + Colors.Color_Off}
 
     def _handle_ready_to_play(self):
         msg = {"action": "host_start_game",
@@ -359,6 +373,9 @@ class Message:
             self._set_selector_events_mask("r")
         elif action == "get_game_properties":
             content = self._handle_get_game_properties()
+            self._set_selector_events_mask("r")
+        elif action == "send_to_player":
+            content = self._handle_send_to_player()
             self._set_selector_events_mask("r")
         else:
             content = {"result": f'Error: invalid action "{action}".'}

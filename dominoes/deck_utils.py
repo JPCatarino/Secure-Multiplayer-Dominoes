@@ -9,6 +9,9 @@ class Player:
         self.name = name
         self.socket = socket
         self.hand = []
+        self.encrypted_hand = []
+        self.aes_player_keys = {}
+        self.aes_player_keys_dec = {}
         self.num_pieces = 0
         self.score = 0
         self.host = False
