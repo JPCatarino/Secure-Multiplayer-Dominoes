@@ -14,8 +14,10 @@ import utils.Colors as Colors
 from security.asymCiphers import readPublicKeyFromPEM
 from security.symCiphers import AESCipher
 
-
 # Main socket code from https://realpython.com/python-sockets/
+
+player_messages = {}
+
 
 class Message:
     def __init__(self, selector, sock, addr, game, player_list, keychain, player_keys_dict, player_keys_dict_PEM):
@@ -168,9 +170,11 @@ class Message:
         self.player_keys_dict[self.request.get("msg")] = readPublicKeyFromPEM(self.request.get("pubkey"))
         self.player_key = readPublicKeyFromPEM(self.request.get("pubkey"))
         encrypted_secret = self.keychain.encrypt(self.player_aes.secret, self.player_key)
+        player_messages[self.player_nickname] = self
         if not self.game.hasHost():  # There is no game for this tabla manager
             self.game.addPlayer(self.request.get("msg"), self.sock, self.game.deck.pieces_per_player)  # Adding host
-            msg = {"action": "you_host", "session_key": encrypted_secret,"msg": Colors.BRed + "You are the host of the game" + Colors.Color_Off}
+            msg = {"action": "you_host", "session_key": encrypted_secret,
+                   "msg": Colors.BRed + "You are the host of the game" + Colors.Color_Off}
             print("User " + Colors.BBlue + "{}".format(
                 self.request.get("msg")) + Colors.Color_Off + " has created a game, he is the first to join")
             return msg
@@ -196,7 +200,8 @@ class Message:
                     # check if table is full
                     if self.game.isFull():
                         print(Colors.BIPurple + "The game is Full" + Colors.Color_Off)
-                        msg = {"action" : "key_exchange", "session_keys": self.player_keys_dict_PEM, "msg": "Establishing players secure session"}
+                        msg = {"action": "key_exchange", "session_keys": self.player_keys_dict_PEM,
+                               "msg": "Establishing players secure session"}
                         self.send_all(msg)
                     return msg
             else:
@@ -206,30 +211,55 @@ class Message:
 
     def _handle_aes_exchange(self):
         if "aes_keys" in self.request:
-            aes_keys= self.request.get("aes_keys")
+            aes_keys = self.request.get("aes_keys")
             list_of_players = aes_keys.keys()
             for player in list_of_players:
                 for player_send in aes_keys[player]:
                     temp = {}
                     temp[player] = aes_keys[player].get(player_send)
-                    msg = {"action" : "receiving_aes", "aes_key" : temp, "player_receive" : player_send}
-                    self.send_all(msg)       
+                    msg = {"action": "receiving_aes", "aes_key": temp, "player_receive": player_send}
+                    self.send_all(msg)
         msg = {"action": "keys_exchanged",
-            "msg": Colors.BYellow + "Keys have been exchanged" + Colors.Color_Off}
+               "msg": Colors.BYellow + "Keys have been exchanged" + Colors.Color_Off}
         self.send_all(msg)
         return msg
-    
+
     def _handle_finish_setup(self):
-        msg = {"action": "waiting_for_host", "msg": Colors.BRed + "Waiting for host to start the game" + Colors.Color_Off}
+        msg = {"action": "waiting_for_host",
+               "msg": Colors.BRed + "Waiting for host to start the game" + Colors.Color_Off}
         return msg
 
     def _handle_start_game(self):
         self.game.deck.generate_pseudonymized_deck()
-        msg = {"action": "host_start_game",
-               "msg": Colors.BYellow + "The Host started the game" + Colors.Color_Off}
-        self.game.players_ready = True
-        self.send_all(msg)
-        return msg
+        self.game.randomization_list = list(player_messages.keys())
+
+        msg_one = {"action": "randomization_stage",
+               "pseudo_deck": self.game.deck.pseudo_deck}
+        msg_two = {"action": "wait", "msg": Colors.BYellow + "Randomization Stage will Begin" + Colors.Color_Off}
+        #self.game.players_ready = True
+        self.send_all(msg_two)
+        self.send_to_player(self.game.randomization_list.pop(), msg_one)
+        return msg_two
+
+    def _handle_next_randomization_step(self):
+        self.game.deck.pseudo_deck = self.request.get("deck")
+
+        if len(self.game.randomization_list) != 0:
+
+            msg_one = {"action": "randomization_stage",
+                       "pseudo_deck": self.game.deck.pseudo_deck}
+
+            msg_two = {"action": "wait", "msg": Colors.BYellow + "Randomization Stage is in progress" + Colors.Color_Off}
+
+            self.send_all(msg_two)
+            self.send_to_player(self.game.randomization_list.pop(), msg_one)
+            return msg_two
+        else:
+            # If randomization ended, skip to next stage
+            msg = {"action": "host_start_game",
+                   "msg": Colors.BYellow + "The Host started the game" + Colors.Color_Off}
+            self.send_all(msg)
+            return msg
 
     def _handle_ready_to_play(self):
         msg = {"action": "host_start_game",
@@ -238,6 +268,7 @@ class Message:
         return msg
 
     def _handle_get_game_properties(self):
+        self.game.players_ready = True
         msg = {"action": "rcv_game_properties"}
         msg.update(self.game.toJson())
         return msg
@@ -320,6 +351,9 @@ class Message:
         elif action == "start_game":
             content = self._handle_start_game()
             self._set_selector_events_mask("r")
+        elif action == "next_randomization_step":
+            content = self._handle_next_randomization_step()
+            self._set_selector_events_mask("r")
         elif action == "ready_to_play":
             content = self._handle_ready_to_play()
             self._set_selector_events_mask("r")
@@ -355,7 +389,5 @@ class Message:
         time.sleep(0.2)
 
     def send_to_player(self, player_name, msg):
-        for sock in self.player_list:
-            if self.player_nickname in player_name:
-                sock.forced_write(msg)
+        player_messages[player_name].forced_write(msg)
         time.sleep(0.2)

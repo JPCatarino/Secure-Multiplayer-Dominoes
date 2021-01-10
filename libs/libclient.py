@@ -224,6 +224,27 @@ class Message:
         msg = {"action": "get_game_properties"}
         return msg
 
+    def _handle_randomization_stage(self):
+        deck = self.response.get("pseudo_deck")
+        new_deck = []
+
+        self.randomized_tuple_mapping = {}
+
+        for piece in deck:
+            new_cipher = AESCipher()
+            ciphertext, nonce, auth_tag = new_cipher.encrypt_aes_gcm(pickle.dumps(piece))
+            # If collision exists, generates new key encrypts again
+            while ciphertext in self.randomized_tuple_mapping.values():
+                new_cipher = AESCipher()
+                ciphertext, nonce, auth_tag = new_cipher.encrypt_aes_gcm(pickle.dumps(piece))
+
+            self.randomized_tuple_mapping[new_cipher.secret] = (ciphertext, nonce, auth_tag)
+            new_deck.append(ciphertext)
+
+        random.shuffle(new_deck)
+
+        return {'action': 'next_randomization_step', 'deck': new_deck}
+
     def _handle_rcv_game_properties(self):
         self.player.nplayers = self.response.get("nplayers")
         self.player.npieces = self.response.get("npieces")
@@ -300,6 +321,10 @@ class Message:
                 self._handle_waiting_for_host_as_player()
         elif action == "host_start_game":
             response = self._handle_host_start_game()
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.aes_cipher)
+            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "randomization_stage":
+            response = self._handle_randomization_stage()
             message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "rcv_game_properties":
