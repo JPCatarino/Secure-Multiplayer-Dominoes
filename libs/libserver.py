@@ -276,17 +276,18 @@ class Message:
             return msg_two
         else:
             # If randomization ended, skip to next stage
-            #msg_one = {"action": "start_selection_stage", "deck": self.game.deck.pseudo_deck,
-            #           "pieces_per_player": self.game.deck.pieces_per_player}
-            #msg_two = {"action": "wait", "msg": Colors.BYellow + "Selection stage will start" + Colors.Color_Off}
-            msg = {"action": "host_start_game",
-                   "msg": Colors.BYellow + "The Host started the game" + Colors.Color_Off}
-            #self.send_all(msg_two)
-            #players_to_send = list(player_messages.keys())
-            #random.shuffle(players_to_send)
-            #self.send_to_player(players_to_send.pop(), msg_one)
-            self.send_all(msg)
-            return msg
+            msg_one = {"action": "start_selection_stage", "deck": self.game.deck.pseudo_deck,
+                       "pieces_per_player": self.game.deck.pieces_per_player,
+                       "stock_low": len(self.game.deck.pseudo_deck) - (self.game.nplayers*self.game.deck.pieces_per_player)}
+            msg_two = {"action": "wait", "msg": Colors.BYellow + "Selection stage will start" + Colors.Color_Off}
+            #msg = {"action": "host_start_game",
+            #       "msg": Colors.BYellow + "The Host started the game" + Colors.Color_Off}
+            self.send_all(msg_two)
+            players_to_send = list(player_messages.keys())
+            random.shuffle(players_to_send)
+            self.send_to_player(players_to_send.pop(), msg_one)
+            #self.send_all(msg)
+            return msg_two
 
     def _handle_send_to_player(self):
         msg_to_send = {'action': 'secret_message', 'sender': self.request.get('sender'),

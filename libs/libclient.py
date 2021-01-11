@@ -187,7 +187,7 @@ class Message:
                 if keys not in self.player.name:
                     self.exchange_aes = AESCipher()
                     encrypted_secret = self.keychain.encrypt(self.exchange_aes.secret,
-                                                            readPublicKeyFromPEM(players_pub_keys[keys]))
+                                                             readPublicKeyFromPEM(players_pub_keys[keys]))
                     aes_exchange_keys[keys] = encrypted_secret
                     aes_keys[self.player.name] = aes_exchange_keys
                     self.player.aes_player_keys_dec[keys] = self.exchange_aes
@@ -210,10 +210,10 @@ class Message:
         for key in list_of_keys:
             aes_secret = self.keychain.decrypt(self.player.aes_player_keys[key])
             self.player.aes_player_keys_dec[key] = AESCipher(aes_secret)
-       
+
         print(self.player.name)
         for secret in self.player.aes_player_keys_dec:
-            print("RESULTADO",secret , self.player.aes_player_keys_dec[secret].secret)
+            print("RESULTADO", secret, self.player.aes_player_keys_dec[secret].secret)
 
         msg = {"action": "finished_setup"}
         return msg
@@ -263,21 +263,14 @@ class Message:
         else:
             random.shuffle(pseudo_deck)
 
-        print("coolio", self.player.aes_player_keys_dec)
-
         players_nicks = list(self.player.aes_player_keys_dec.keys())
         player_to_send_deck = random.choice(players_nicks)
 
         encrypted_message = pickle.dumps({'action': "selection_stage", "deck": pseudo_deck,
-                                          'pieces_per_player': self.response.get("pieces_per_player")})
+                                          'pieces_per_player': self.response.get("pieces_per_player"),
+                                          "stock_low": self.response.get("stock_low")})
 
         encrypted_tuple = self.player.aes_player_keys_dec[player_to_send_deck].encrypt_aes_gcm(encrypted_message)
-
-        print('ciphertext', encrypted_tuple[0])
-        print('nonce', encrypted_tuple[1])
-        print('authtag', encrypted_tuple[2])
-        print('cipherkey', self.player.aes_player_keys_dec[player_to_send_deck].secret)
-
 
         msg = {'action': 'send_to_player', 'sender': self.player.name, 'rec': player_to_send_deck,
                'to_send': encrypted_tuple}
@@ -287,31 +280,33 @@ class Message:
     def _handle_selection_stage(self):
         # Picks a piece from the deck or passes, shuffles and sends to another player
         pseudo_deck = self.response.get("deck")
-        print("coolio", self.player.aes_player_keys_dec)
         self.player.npieces = self.response.get("pieces_per_player")
 
         players_nicks = list(self.player.aes_player_keys_dec.keys())
-        print("response", self.response)
 
         if len(self.player.encrypted_hand) < self.player.npieces:
             if random.random() < 0.05:
-                self.player.encrypted_hand.append(random.shuffle(pseudo_deck).pop())
+                random.shuffle(pseudo_deck)
+                self.player.encrypted_hand.append(pseudo_deck.pop())
             elif random.random() < 0.50:
                 # Substitute already selected pieces
                 pass
             else:
                 random.shuffle(pseudo_deck)
 
-        player_to_send_deck = random.choice(players_nicks)
+        if len(pseudo_deck) > self.response.get("stock_low"):
+            player_to_send_deck = random.choice(players_nicks)
 
-        encrypted_message = pickle.dumps({'action': "selection_stage", "deck": pseudo_deck,
-                             'pieces_per_player': self.response.get("pieces_per_player")})
+            encrypted_message = pickle.dumps({'action': "selection_stage", "deck": pseudo_deck,
+                                              'pieces_per_player': self.response.get("pieces_per_player"),
+                                              'stock_low': self.response.get('stock_low')})
 
-        encrypted_tuple = self.player.aes_player_keys_dec[player_to_send_deck].encrypt_aes_gcm(encrypted_message)
+            encrypted_tuple = self.player.aes_player_keys_dec[player_to_send_deck].encrypt_aes_gcm(encrypted_message)
 
-
-        msg = {'action': 'send_to_player', 'sender': self.player.name, 'rec': player_to_send_deck,
-               'to_send': encrypted_tuple}
+            msg = {'action': 'send_to_player', 'sender': self.player.name, 'rec': player_to_send_deck,
+                   'to_send': encrypted_tuple}
+        else:
+            msg = {'action': 'ready_to_play'}
 
         return msg
 
@@ -319,14 +314,9 @@ class Message:
         cipher = self.player.aes_player_keys_dec[self.response.get('sender')]
         encrypted_tuple = self.response.get('msg')
 
-        print('ciphertext', encrypted_tuple[0])
-        print('nonce', encrypted_tuple[1])
-        print('authtag', encrypted_tuple[2])
-        print('cipherkey', cipher.secret)
+        deciphered_msg = pickle.loads(cipher.decrypt_aes_gcm(encrypted_tuple))
 
-        deciphered_msg = cipher.decrypt_aes_gcm(encrypted_tuple)
-
-        print("decifrado", deciphered_msg)
+        return deciphered_msg
 
     def _handle_rcv_game_properties(self):
         self.player.nplayers = self.response.get("nplayers")
@@ -378,7 +368,9 @@ class Message:
         content = self.response
         action = content.get("action")
         if action == "secret_message":
-            self._handle_secret_message()
+            deciphered = self._handle_secret_message()
+            action = deciphered.get("action")
+            self.response = deciphered
         if action == "login":
             response = self._handle_login()
             message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
