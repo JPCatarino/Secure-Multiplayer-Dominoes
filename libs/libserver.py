@@ -207,7 +207,7 @@ class Message:
 
                         list_of_keys = self.player_keys_dict_PEM.keys()
                         list_of_pairs = [comb for comb in combinations(list_of_keys, 2)]
-                        
+
                         for pair in list_of_pairs:
                             if pair[0] not in pair_dict.keys():
                                 pair_dict[pair[0]] = []
@@ -216,12 +216,12 @@ class Message:
                             for new_keys in pair_dict[key]:
                                 sub_player_PEM[new_keys] = self.player_keys_dict_PEM[new_keys]
                             msg = {"action": "key_exchange", "session_keys": sub_player_PEM,
-                               "msg": "Establishing players secure session"}
+                                   "msg": "Establishing players secure session"}
                             self.send_to_player(key, msg)
                             sub_player_PEM = {}
 
-                        msg = {"action": "wait",
-                               "msg": "Establishing players secure session"}
+                        msg = {"action": "send_pub_keys",
+                               "msg": "Establishing players secure session", "pub_keys": self.player_keys_dict_PEM}
                         self.send_all(msg)
                     return msg
             else:
@@ -254,9 +254,9 @@ class Message:
         self.game.randomization_list = list(player_messages.keys())
 
         msg_one = {"action": "randomization_stage",
-               "pseudo_deck": self.game.deck.pseudo_deck}
+                   "pseudo_deck": self.game.deck.pseudo_deck}
         msg_two = {"action": "wait", "msg": Colors.BYellow + "Randomization Stage will Begin" + Colors.Color_Off}
-        #self.game.players_ready = True
+        # self.game.players_ready = True
         self.send_all(msg_two)
         self.send_to_player(self.game.randomization_list.pop(), msg_one)
         return msg_two
@@ -269,7 +269,8 @@ class Message:
             msg_one = {"action": "randomization_stage",
                        "pseudo_deck": self.game.deck.pseudo_deck}
 
-            msg_two = {"action": "wait", "msg": Colors.BYellow + "Randomization Stage is in progress" + Colors.Color_Off}
+            msg_two = {"action": "wait",
+                       "msg": Colors.BYellow + "Randomization Stage is in progress" + Colors.Color_Off}
 
             self.send_all(msg_two)
             self.send_to_player(self.game.randomization_list.pop(), msg_one)
@@ -278,16 +279,49 @@ class Message:
             # If randomization ended, skip to next stage
             msg_one = {"action": "start_selection_stage", "deck": self.game.deck.pseudo_deck,
                        "pieces_per_player": self.game.deck.pieces_per_player,
-                       "stock_low": len(self.game.deck.pseudo_deck) - (self.game.nplayers*self.game.deck.pieces_per_player)}
+                       "stock_low": len(self.game.deck.pseudo_deck) - (
+                               self.game.nplayers * self.game.deck.pieces_per_player)}
             msg_two = {"action": "wait", "msg": Colors.BYellow + "Selection stage will start" + Colors.Color_Off}
-            #msg = {"action": "host_start_game",
+            # msg = {"action": "host_start_game",
             #       "msg": Colors.BYellow + "The Host started the game" + Colors.Color_Off}
             self.send_all(msg_two)
             players_to_send = list(player_messages.keys())
             random.shuffle(players_to_send)
             self.send_to_player(players_to_send.pop(), msg_one)
-            #self.send_all(msg)
+            # self.send_all(msg)
             return msg_two
+
+    def _handle_selection_stage_over(self):
+        msg = {'action': 'commit_hand'}
+        self.send_all(msg)
+        return msg
+
+    def _handle_send_commit(self):
+        self.game.players_commits[self.player_nickname] = self.request.get("commit")
+
+        for player in self.game.players_commits:
+            if not self.keychain.verify_sign(pickle.dumps(self.game.players_commits[player][0]),
+                                             self.game.players_commits[player][1],
+                                             self.player_keys_dict[player]):
+                print(Colors.BRed + "GAME NOT VALID" + Colors.Color_Off)
+                exit(1)
+
+        if len(self.game.players_commits) < self.game.nplayers:
+            return {'action': "wait", 'msg': Colors.BYellow + "Commits in progress" + Colors.Color_Off}
+        else:
+            msg = {'action': "validate_selection", "commits": self.game.players_commits,
+                   "stock": self.game.deck.pseudo_deck}
+            self.send_all(msg)
+            return msg
+
+    def _handle_hands_validated(self):
+        print(Colors.Green + "Player " + self.player_nickname + " validated game start" + Colors.Color_Off)
+        self.game.init_validation_count += 1
+
+        if self.game.init_validation_count < self.game.nplayers:
+            return {"action": "wait", "msg": "Await further validation"}
+        else:
+            return self._handle_ready_to_play()
 
     def _handle_send_to_player(self):
         msg_to_send = {'action': 'secret_message', 'sender': self.request.get('sender'),
@@ -387,6 +421,15 @@ class Message:
             self._set_selector_events_mask("r")
         elif action == "next_randomization_step":
             content = self._handle_next_randomization_step()
+            self._set_selector_events_mask("r")
+        elif action == "selection_over":
+            content = self._handle_selection_stage_over()
+            self._set_selector_events_mask("r")
+        elif action == "send_commit":
+            content = self._handle_send_commit()
+            self._set_selector_events_mask("r")
+        elif action == "hands_validated":
+            content = self._handle_hands_validated()
             self._set_selector_events_mask("r")
         elif action == "ready_to_play":
             content = self._handle_ready_to_play()

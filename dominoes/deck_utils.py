@@ -9,9 +9,12 @@ class Player:
         self.name = name
         self.socket = socket
         self.hand = []
+        self.hand_commit = []
         self.encrypted_hand = []
         self.aes_player_keys = {}
         self.aes_player_keys_dec = {}
+        self.player_pub_keys = {}
+        self.players_commits = {}
         self.num_pieces = 0
         self.score = 0
         self.host = False
@@ -19,6 +22,7 @@ class Player:
         self.ready_to_play = False
         self.in_table = []
         self.deck = []
+        self.pseudo_starting_stock = []
         self.nopiece = False
 
     def __str__(self):
