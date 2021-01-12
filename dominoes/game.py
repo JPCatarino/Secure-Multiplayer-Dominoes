@@ -8,6 +8,8 @@ class Game:
         self.nplayers = 0
         self.players = []
         self.player_index = 0
+        self.init_validation_count = 0
+        self.players_commits = {}
         self.init_distribution = True
         self.next_action="get_piece"
         self.started = False

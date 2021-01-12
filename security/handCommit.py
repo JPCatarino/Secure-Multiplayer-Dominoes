@@ -1,5 +1,5 @@
-import hashFunctions
 import os
+from security import hashFunctions
 import pickle
 
 

@@ -14,6 +14,7 @@ from dominoes.deck_utils import Player
 from utils import Colors as Colors
 from security.symCiphers import AESCipher
 from security.asymCiphers import readPublicKeyFromPEM
+from security.handCommit import *
 
 
 # Main socket code from https://realpython.com/python-sockets/
@@ -285,7 +286,7 @@ class Message:
         players_nicks = list(self.player.aes_player_keys_dec.keys())
 
         if len(self.player.encrypted_hand) < self.player.npieces:
-            if random.random() < 0.05:
+            if random.random() < 0.60:
                 random.shuffle(pseudo_deck)
                 self.player.encrypted_hand.append(pseudo_deck.pop())
             elif random.random() < 0.50:
@@ -306,9 +307,31 @@ class Message:
             msg = {'action': 'send_to_player', 'sender': self.player.name, 'rec': player_to_send_deck,
                    'to_send': encrypted_tuple}
         else:
-            msg = {'action': 'ready_to_play'}
+            msg = {'action': 'selection_over'}
 
         return msg
+
+    def _handle_commit_hand(self):
+        self.player.hand_commit = HandCommit(self.player.encrypted_hand)
+
+        signed_commit = self.keychain.sign(pickle.dumps(self.player.hand_commit.publishCommit()))
+
+        msg = {"action": 'send_commit', "commit": (self.player.hand_commit.publishCommit(), signed_commit)}
+
+        return msg
+
+    def _handle_validate_selection(self):
+        self.player.players_commits = self.response.get("commits")
+        print(self.player.player_pub_keys)
+        for player in self.player.players_commits:
+            if not self.keychain.verify_sign(pickle.dumps(self.player.players_commits[player][0]),
+                                             self.player.players_commits[player][1],
+                                             readPublicKeyFromPEM(self.player.player_pub_keys[player])):
+                print(Colors.BRed + "GAME NOT VALID" + Colors.Color_Off)
+                exit(1)
+
+        self.player.pseudo_starting_stock = self.response.get('stock')
+        return {"action": "hands_validated"}
 
     def _handle_secret_message(self):
         cipher = self.player.aes_player_keys_dec[self.response.get('sender')]
@@ -380,6 +403,9 @@ class Message:
             self._handle_you_host()
         elif action == "new_player":
             self._handle_new_player()
+        elif action == "send_pub_keys":
+            print(self.response.get("msg"))
+            self.player.player_pub_keys = self.response.get('pub_keys')
         elif action == "key_exchange":
             response = self._handle_key_exchange()
             message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
@@ -417,6 +443,16 @@ class Message:
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "selection_stage":
             response = self._handle_selection_stage()
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+                              self.aes_cipher)
+            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "commit_hand":
+            response = self._handle_commit_hand()
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+                              self.aes_cipher)
+            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "validate_selection":
+            response = self._handle_validate_selection()
             message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
                               self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
