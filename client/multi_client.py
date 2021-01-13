@@ -13,12 +13,14 @@ sys.path.append(os.path.abspath(os.path.join('..')))
 
 from libs.libclient import Message
 from security.asymCiphers import RSAKeychain
+from security.CC_utils import CitizenCard
 
 # Main socket code from https://realpython.com/python-sockets/
 
 sel = selectors.DefaultSelector()
 PLAYER = None
 PLAYER_KEYCHAIN = RSAKeychain()
+PLAYER_CC = CitizenCard()
 
 def start_connections(host, port):
     addr = (host, port)
@@ -28,7 +30,7 @@ def start_connections(host, port):
     sock.connect_ex(addr)
     events = selectors.EVENT_READ | selectors.EVENT_WRITE
     request = create_request("hello")
-    message = Message(sel, sock, addr, request, PLAYER, PLAYER_KEYCHAIN)
+    message = Message(sel, sock, addr, request, PLAYER, PLAYER_KEYCHAIN, PLAYER_CC)
     sel.register(sock, events, data=message)
 
 def create_request(action):

@@ -15,14 +15,14 @@ import utils.Colors as Colors
 from security.asymCiphers import readPublicKeyFromPEM
 from security.symCiphers import AESCipher
 from itertools import combinations
-
+from security.CC_utils import validate_certificates
 # Main socket code from https://realpython.com/python-sockets/
 
 player_messages = {}
 
 
 class Message:
-    def __init__(self, selector, sock, addr, game, player_list, keychain, player_keys_dict, player_keys_dict_PEM):
+    def __init__(self, selector, sock, addr, game, player_list, keychain, player_keys_dict, player_keys_dict_PEM, signed_nicks, certs):
         self.selector = selector
         self.sock = sock
         self.addr = addr
@@ -31,6 +31,8 @@ class Message:
         self.player_list = player_list
         self.player_keys_dict = player_keys_dict
         self.player_keys_dict_PEM = player_keys_dict_PEM
+        self.signed_nicknames = signed_nicks
+        self.certs = certs
         self.player_aes = AESCipher()
         self.player_nickname = ""
         self.player_key = None
@@ -168,6 +170,10 @@ class Message:
     def _handle_login(self):
         print("User {} requests login, with nickname {}".format(self.sock.getpeername(), self.request.get("msg")))
         self.player_nickname = self.request.get("msg")
+        if(validate_certificates(self.request.get("cert"), self.certs)):
+            self.signed_nicknames[self.player_nickname] = self.request.get("signed_nick")
+        else:
+            print("Invalid Certificate! User will not be assigned")
         self.player_keys_dict_PEM[self.request.get("msg")] = self.request.get("pubkey")
         self.player_keys_dict[self.request.get("msg")] = readPublicKeyFromPEM(self.request.get("pubkey"))
         self.player_key = readPublicKeyFromPEM(self.request.get("pubkey"))
@@ -370,10 +376,14 @@ class Message:
         print("player " + player.name + " played " + str(self.request.get("piece")))
         print("in table -> " + ' '.join(map(str, self.game.deck.in_table)) + "\n")
         print("deck -> " + ' '.join(map(str, self.game.deck.deck)) + "\n")
+
         if self.request.get("win"):
             if player.checkifWin():
+                for player in self.game.players:
+                    for piece in player.hand:
+                        score = piece.values[0].value + piece.values[1].value
                 print(Colors.BGreen + " WINNER " + player.name + Colors.Color_Off)
-                msg = {"action": "end_game", "winner": player.name}
+                msg = {"action": "end_game", "winner": player.name, "score": score}
         else:
             msg = {"action": "rcv_game_properties"}
         msg.update(self.game.toJson())

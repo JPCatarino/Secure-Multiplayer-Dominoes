@@ -20,12 +20,13 @@ from security.handCommit import *
 # Main socket code from https://realpython.com/python-sockets/
 
 class Message:
-    def __init__(self, selector, sock, addr, request, player, keychain, aes_cipher=None):
+    def __init__(self, selector, sock, addr, request, player, keychain, player_cc, aes_cipher=None):
         self.selector = selector
         self.sock = sock
         self.addr = addr
         self.player = player
         self.keychain = keychain
+        self.cc = player_cc
         self.aes_cipher = aes_cipher
         self.aes_player_keys = {}
         self.exchange_aes = None
@@ -159,8 +160,10 @@ class Message:
 
     def _handle_login(self):
         nickname = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))  # input(data["msg"])
+        signed_nick = self.cc.signData(nickname)
+        cert = self.cc.get_signature_cert()
         print("Your name is " + Colors.BBlue + nickname + Colors.Color_Off)
-        msg = {"action": "req_login", "pubkey": self.keychain.exportPubKey(), "msg": nickname}
+        msg = {"action": "req_login", "pubkey": self.keychain.exportPubKey(), "msg": nickname, "signed_nick": signed_nick, "cert": cert}
         self.player = Player(nickname, self.sock)
         return msg
 
@@ -372,11 +375,12 @@ class Message:
 
     def _handle_end_game(self):
         winner = self.response.get("winner")
+        score = self.response.get("score")
         if self.response.get("winner") == self.player.name:
             winner = Colors.BRed + "YOU" + Colors.Color_Off
         else:
             winner = Colors.BBlue + winner + Colors.Color_Off
-        print(Colors.BGreen + "End GAME, THE WINNER IS: " + winner)
+        print(Colors.BGreen + "End GAME, THE WINNER IS: " + winner + "Score:" + str(score))
 
     def _handle_wait(self):
         print(self.response.get("msg"))
@@ -396,7 +400,7 @@ class Message:
             self.response = deciphered
         if action == "login":
             response = self._handle_login()
-            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
                               self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "you_host":
@@ -408,58 +412,58 @@ class Message:
             self.player.player_pub_keys = self.response.get('pub_keys')
         elif action == "key_exchange":
             response = self._handle_key_exchange()
-            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
                               self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "receiving_aes":
             self._handle_receiving_aes()
         elif action == "keys_exchanged":
             response = self._handle_keys_exchanged()
-            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
                               self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "waiting_for_host":
             if self.player.host:
                 response = self._handle_waiting_for_host_as_host()
-                message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+                message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
                                   self.aes_cipher)
                 self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
             else:
                 self._handle_waiting_for_host_as_player()
         elif action == "host_start_game":
             response = self._handle_host_start_game()
-            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
                               self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "randomization_stage":
             response = self._handle_randomization_stage()
-            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
                               self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "start_selection_stage":
             response = self._handle_start_selection_stage()
-            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
                               self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "selection_stage":
             response = self._handle_selection_stage()
-            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
                               self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "commit_hand":
             response = self._handle_commit_hand()
-            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
                               self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "validate_selection":
             response = self._handle_validate_selection()
-            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
                               self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "rcv_game_properties":
             response = self._handle_rcv_game_properties()
             if response is not None:
-                message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain,
+                message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
                                   self.aes_cipher)
                 self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "end_game":

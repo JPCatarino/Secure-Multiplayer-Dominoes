@@ -24,6 +24,7 @@ class Player:
         self.deck = []
         self.pseudo_starting_stock = []
         self.nopiece = False
+        self.player_registered = False
 
     def __str__(self):
         return str(self.toJson())
