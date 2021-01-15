@@ -16,13 +16,16 @@ from security.asymCiphers import readPublicKeyFromPEM
 from security.symCiphers import AESCipher
 from itertools import combinations
 from security.CC_utils import validate_certificates
+from collections import deque
+
 # Main socket code from https://realpython.com/python-sockets/
 
 player_messages = {}
 
 
 class Message:
-    def __init__(self, selector, sock, addr, game, player_list, keychain, player_keys_dict, player_keys_dict_PEM, signed_nicks, certs):
+    def __init__(self, selector, sock, addr, game, player_list, keychain, player_keys_dict, player_keys_dict_PEM,
+                 signed_nicks, certs):
         self.selector = selector
         self.sock = sock
         self.addr = addr
@@ -111,7 +114,7 @@ class Message:
     def _read(self):
         try:
             # Should be ready to read
-            data = self.sock.recv(4096)
+            data = self.sock.recv(8192)
         except BlockingIOError:
             # Resource temporarily unavailable (errno EWOULDBLOCK)
             pass
@@ -170,7 +173,7 @@ class Message:
     def _handle_login(self):
         print("User {} requests login, with nickname {}".format(self.sock.getpeername(), self.request.get("msg")))
         self.player_nickname = self.request.get("msg")
-        if(validate_certificates(self.request.get("cert"), self.certs)):
+        if (validate_certificates(self.request.get("cert"), self.certs)):
             self.signed_nicknames[self.player_nickname] = self.request.get("signed_nick")
         else:
             print("Invalid Certificate! User will not be assigned")
@@ -258,12 +261,14 @@ class Message:
     def _handle_start_game(self):
         self.game.deck.generate_pseudonymized_deck()
         self.game.randomization_list = list(player_messages.keys())
+        self.game.randomization_order = list()
 
         msg_one = {"action": "randomization_stage",
                    "pseudo_deck": self.game.deck.pseudo_deck}
         msg_two = {"action": "wait", "msg": Colors.BYellow + "Randomization Stage will Begin" + Colors.Color_Off}
         # self.game.players_ready = True
         self.send_all(msg_two)
+        self.game.randomization_order.append(self.game.randomization_list[-1])
         self.send_to_player(self.game.randomization_list.pop(), msg_one)
         return msg_two
 
@@ -278,6 +283,7 @@ class Message:
             msg_two = {"action": "wait",
                        "msg": Colors.BYellow + "Randomization Stage is in progress" + Colors.Color_Off}
 
+            self.game.randomization_order.append(self.game.randomization_list[-1])
             self.send_all(msg_two)
             self.send_to_player(self.game.randomization_list.pop(), msg_one)
             return msg_two
@@ -288,16 +294,15 @@ class Message:
                        "stock_low": len(self.game.deck.pseudo_deck) - (
                                self.game.nplayers * self.game.deck.pieces_per_player)}
             msg_two = {"action": "wait", "msg": Colors.BYellow + "Selection stage will start" + Colors.Color_Off}
-            # msg = {"action": "host_start_game",
-            #       "msg": Colors.BYellow + "The Host started the game" + Colors.Color_Off}
+
             self.send_all(msg_two)
             players_to_send = list(player_messages.keys())
             random.shuffle(players_to_send)
             self.send_to_player(players_to_send.pop(), msg_one)
-            # self.send_all(msg)
             return msg_two
 
     def _handle_selection_stage_over(self):
+        self.game.deck.init_stock = self.request.get("deck")
         msg = {'action': 'commit_hand'}
         self.send_all(msg)
         return msg
@@ -316,7 +321,7 @@ class Message:
             return {'action': "wait", 'msg': Colors.BYellow + "Commits in progress" + Colors.Color_Off}
         else:
             msg = {'action': "validate_selection", "commits": self.game.players_commits,
-                   "stock": self.game.deck.pseudo_deck}
+                   "stock": self.game.deck.init_stock}
             self.send_all(msg)
             return msg
 
@@ -327,7 +332,38 @@ class Message:
         if self.game.init_validation_count < self.game.nplayers:
             return {"action": "wait", "msg": "Await further validation"}
         else:
-            return self._handle_ready_to_play()
+            # for player in self.game.players:
+            #    player.updatePieces(self.game.deck.pieces_per_player)
+            msg_one = {"action": "reveal_keys", 'msg': Colors.BYellow + "Revealing your keys" + Colors.Color_Off}
+            msg_two = {"action": "wait", 'msg': Colors.BYellow + "Revelation in Progress" + Colors.Color_Off}
+            self.game.randomization_order = deque(self.game.randomization_order)
+            self.game.first_in_randomization = self.game.randomization_order[-1]
+            self.send_to_player(self.game.randomization_order[-1], msg_one)
+            self.send_all(msg_two)
+            return msg_two
+
+    def _handle_revealed_keys(self):
+        msg = {"action": "keys_to_reveal", "keys_dict": self.request.get("keys_dict")}
+        self.send_all(msg)
+        return {"action": "keys_sent", "msg": "Keys were sent"}
+
+    def _handle_waiting_for_keys(self):
+        self.game.players_waiting += 1
+        if self.game.players_waiting >= self.game.nplayers:
+            self.game.randomization_order.rotate(1)
+            self.game.players_waiting = 0
+            if self.game.first_in_randomization != self.game.randomization_order[-1]:
+                msg_one = {"action": "reveal_keys", 'msg': Colors.BYellow + "Revealing your keys" + Colors.Color_Off}
+                msg_two = {"action": "wait", 'msg': Colors.BYellow + "Revelation in Progress" + Colors.Color_Off}
+                self.game.randomization_order = deque(self.game.randomization_order)
+                self.send_to_player(self.game.randomization_order[-1], msg_one)
+                self.send_all(msg_two)
+                return msg_two
+            else:
+                print(Colors.BGreen + "Revelation Stage End!" + Colors.Color_Off)
+                return self._handle_ready_to_play()
+        else:
+            return {'action': 'wait', 'msg': Colors.BYellow + "Waiting for other players to reveal" + Colors.Color_Off}
 
     def _handle_send_to_player(self):
         msg_to_send = {'action': 'secret_message', 'sender': self.request.get('sender'),
@@ -440,6 +476,12 @@ class Message:
             self._set_selector_events_mask("r")
         elif action == "hands_validated":
             content = self._handle_hands_validated()
+            self._set_selector_events_mask("r")
+        elif action == "revealed_keys":
+            content = self._handle_revealed_keys()
+            self._set_selector_events_mask("r")
+        elif action == "waiting_for_keys":
+            content = self._handle_waiting_for_keys()
             self._set_selector_events_mask("r")
         elif action == "ready_to_play":
             content = self._handle_ready_to_play()

@@ -15,6 +15,8 @@ class Game:
         self.started = False
         self.players_ready = False
         self.all_ready_to_play = False
+        self.players_waiting = 0
+        self.first_in_randomization = None
 
     def checkDeadLock(self):
         return all([ player.nopiece for player in self.players ])

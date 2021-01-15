@@ -17,7 +17,6 @@ sys.path.append(os.path.abspath(os.path.join('..')))
 
 from security.CC import CitizenCard
 
-import vlc
 
 def validate_certificates(cf_bytes, ccerts_bytes):
     

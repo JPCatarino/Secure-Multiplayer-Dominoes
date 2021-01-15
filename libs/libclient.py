@@ -114,7 +114,7 @@ class Message:
     def _read(self):
         try:
             # Should be ready to read
-            data = self.sock.recv(4096)
+            data = self.sock.recv(8192)
         except BlockingIOError:
             # Resource temporarily unavailable (errno EWOULDBLOCK)
             pass
@@ -163,7 +163,8 @@ class Message:
         signed_nick = self.cc.signData(nickname)
         cert = self.cc.get_signature_cert()
         print("Your name is " + Colors.BBlue + nickname + Colors.Color_Off)
-        msg = {"action": "req_login", "pubkey": self.keychain.exportPubKey(), "msg": nickname, "signed_nick": signed_nick, "cert": cert}
+        msg = {"action": "req_login", "pubkey": self.keychain.exportPubKey(), "msg": nickname,
+               "signed_nick": signed_nick, "cert": cert}
         self.player = Player(nickname, self.sock)
         return msg
 
@@ -310,7 +311,7 @@ class Message:
             msg = {'action': 'send_to_player', 'sender': self.player.name, 'rec': player_to_send_deck,
                    'to_send': encrypted_tuple}
         else:
-            msg = {'action': 'selection_over'}
+            msg = {'action': 'selection_over', "deck": pseudo_deck}
 
         return msg
 
@@ -335,6 +336,53 @@ class Message:
 
         self.player.pseudo_starting_stock = self.response.get('stock')
         return {"action": "hands_validated"}
+
+    def _handle_reveal_keys(self):
+        print(self.response.get("msg"))
+
+        key_tuple_dict = {}
+
+        keys_to_send = [keys for keys in self.player.randomized_tuple_mapping.keys() if
+                        self.player.randomized_tuple_mapping[keys][0] not in self.player.pseudo_starting_stock]
+
+        for key in keys_to_send:
+            key_tuple_dict[self.player.randomized_tuple_mapping[key]] = key
+
+        aux_encrypted_hand = []
+
+        for piece in self.player.encrypted_hand:
+            for tuple_piece in key_tuple_dict:
+                if piece == tuple_piece[0]:
+                    decipher = AESCipher(key_tuple_dict[tuple_piece])
+                    deciphered_piece = pickle.loads(decipher.decrypt_aes_gcm(tuple_piece))
+                    aux_encrypted_hand.append(deciphered_piece)
+
+        self.player.encrypted_hand = aux_encrypted_hand
+
+        print('size', sys.getsizeof(key_tuple_dict))
+        print('dict', key_tuple_dict)
+
+        return {'action': 'revealed_keys', 'keys_dict': key_tuple_dict}
+
+    def _handle_keys_to_reveal(self):
+        key_tuple_dict = self.response.get("keys_dict")
+        aux_encrypted_hand = []
+
+        print(Colors.BYellow + "Revealing Pieces" + Colors.Color_Off)
+
+        for piece in self.player.encrypted_hand:
+            for tuple_piece in key_tuple_dict:
+                if piece == tuple_piece[0]:
+                    decipher = AESCipher(key_tuple_dict[tuple_piece])
+                    deciphered_piece = pickle.loads(decipher.decrypt_aes_gcm(tuple_piece))
+                    aux_encrypted_hand.append(deciphered_piece)
+
+        self.player.encrypted_hand = aux_encrypted_hand
+
+        return {"action": "waiting_for_keys"}
+
+    def _handle_keys_sent(self):
+        return {'action': 'waiting_for_keys'}
 
     def _handle_secret_message(self):
         cipher = self.player.aes_player_keys_dec[self.response.get('sender')]
@@ -457,6 +505,21 @@ class Message:
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "validate_selection":
             response = self._handle_validate_selection()
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
+                              self.aes_cipher)
+            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "reveal_keys":
+            response = self._handle_reveal_keys()
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
+                              self.aes_cipher)
+            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "keys_to_reveal":
+            response = self._handle_keys_to_reveal()
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
+                              self.aes_cipher)
+            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "keys_sent":
+            response = self._handle_keys_sent()
             message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
                               self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
