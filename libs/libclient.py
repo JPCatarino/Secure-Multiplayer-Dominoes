@@ -260,10 +260,12 @@ class Message:
     def _handle_start_selection_stage(self):
         # Picks a piece from the deck or passes, shuffles and sends to another player
         pseudo_deck = self.response.get("deck")
+        padding = self.response.get("padding")
         self.player.npieces = self.response.get("pieces_per_player")
 
         if random.random() < 0.05:
             random.shuffle(pseudo_deck)
+            padding.append(os.urandom(sys.getsizeof(pseudo_deck[-1])))
             self.player.encrypted_hand.append(pseudo_deck.pop())
         else:
             random.shuffle(pseudo_deck)
@@ -273,7 +275,7 @@ class Message:
 
         encrypted_message = pickle.dumps({'action': "selection_stage", "deck": pseudo_deck,
                                           'pieces_per_player': self.response.get("pieces_per_player"),
-                                          "stock_low": self.response.get("stock_low")})
+                                          "stock_low": self.response.get("stock_low"), "padding": padding})
 
         encrypted_tuple = self.player.aes_player_keys_dec[player_to_send_deck].encrypt_aes_gcm(encrypted_message)
 
@@ -285,6 +287,7 @@ class Message:
     def _handle_selection_stage(self):
         # Picks a piece from the deck or passes, shuffles and sends to another player
         pseudo_deck = self.response.get("deck")
+        padding = self.response.get("padding")
         self.player.npieces = self.response.get("pieces_per_player")
 
         players_nicks = list(self.player.aes_player_keys_dec.keys())
@@ -292,6 +295,7 @@ class Message:
         if len(self.player.encrypted_hand) < self.player.npieces:
             if random.random() < 0.60:
                 random.shuffle(pseudo_deck)
+                padding.append(os.urandom(sys.getsizeof(pseudo_deck[-1])))
                 self.player.encrypted_hand.append(pseudo_deck.pop())
             elif random.random() < 0.50:
                 # Substitute already selected pieces
@@ -304,7 +308,7 @@ class Message:
 
             encrypted_message = pickle.dumps({'action': "selection_stage", "deck": pseudo_deck,
                                               'pieces_per_player': self.response.get("pieces_per_player"),
-                                              'stock_low': self.response.get('stock_low')})
+                                              'stock_low': self.response.get('stock_low'), "padding": padding})
 
             encrypted_tuple = self.player.aes_player_keys_dec[player_to_send_deck].encrypt_aes_gcm(encrypted_message)
 

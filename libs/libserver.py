@@ -292,7 +292,7 @@ class Message:
             msg_one = {"action": "start_selection_stage", "deck": self.game.deck.pseudo_deck,
                        "pieces_per_player": self.game.deck.pieces_per_player,
                        "stock_low": len(self.game.deck.pseudo_deck) - (
-                               self.game.nplayers * self.game.deck.pieces_per_player)}
+                               self.game.nplayers * self.game.deck.pieces_per_player), "padding": []}
             msg_two = {"action": "wait", "msg": Colors.BYellow + "Selection stage will start" + Colors.Color_Off}
 
             self.send_all(msg_two)
