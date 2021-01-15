@@ -13,8 +13,9 @@ sys.path.append(os.path.abspath(os.path.join('..')))
 from dominoes.deck_utils import Player
 from utils import Colors as Colors
 from security.symCiphers import AESCipher
-from security.asymCiphers import readPublicKeyFromPEM
+from security.asymCiphers import readPublicKeyFromPEM, RSAKeychain
 from security.handCommit import *
+from security.hashFunctions import *
 
 
 # Main socket code from https://realpython.com/python-sockets/
@@ -388,6 +389,90 @@ class Message:
     def _handle_keys_sent(self):
         return {'action': 'waiting_for_keys'}
 
+    def _handle_start_deanon_stage(self):
+        pub_key_list = self.response.get("pub_key_list")
+        padding = self.response.get("padding")
+        self.player.npieces = self.response.get("pieces_per_player")
+
+        if random.random() < 0.05:
+            print(Colors.BGreen + "Adding Public Key To Array" + Colors.Color_Off)
+            padding.pop()
+            padding.insert(0, None)
+            tuple_to_add = self.player.encrypted_hand.pop()
+            new_key = RSAKeychain(2048)
+            self.player.tuple_keychains[tuple_to_add] = new_key
+            pub_key_list[tuple_to_add[0]] = new_key.exportPubKey()
+        else:
+            print(Colors.BGreen + "Passing" + Colors.Color_Off)
+
+        players_nicks = list(self.player.aes_player_keys_dec.keys())
+        player_to_send_deck = random.choice(players_nicks)
+
+        encrypted_message = pickle.dumps({'action': "deanon_stage", "pub_key_list": pub_key_list,
+                                          'pieces_per_player': self.response.get("pieces_per_player"),
+                                          "max_pieces": self.response.get("max_pieces"), "padding": padding})
+
+        encrypted_tuple = self.player.aes_player_keys_dec[player_to_send_deck].encrypt_aes_gcm(encrypted_message)
+
+        msg = {'action': 'send_to_player', 'sender': self.player.name, 'rec': player_to_send_deck,
+               'to_send': encrypted_tuple}
+
+        return msg
+
+    def _handle_deanon_stage(self):
+        pub_key_list = self.response.get("pub_key_list")
+        padding = self.response.get("padding")
+        self.player.npieces = self.response.get("pieces_per_player")
+
+        players_nicks = list(self.player.aes_player_keys_dec.keys())
+
+        if len(self.player.encrypted_hand) > 0:
+            if random.random() < 0.60:
+                print(Colors.BGreen + "Adding Public Key To Array" + Colors.Color_Off)
+                padding.pop()
+                padding.insert(0, None)
+                new_key = RSAKeychain(2048)
+                tuple_to_add = self.player.encrypted_hand.pop()
+                self.player.tuple_keychains[tuple_to_add] = new_key
+                pub_key_list[tuple_to_add[0]] = new_key.exportPubKey()
+            else:
+                print(Colors.BGreen + "Passing" + Colors.Color_Off)
+
+        sum_check_done = sum(item is not None for item in pub_key_list)
+        if sum_check_done < self.response.get('max_pieces'):
+            player_to_send_deck = random.choice(players_nicks)
+
+            encrypted_message = pickle.dumps({'action': "deanon_stage", "pub_key_list": pub_key_list,
+                                              'pieces_per_player': self.response.get("pieces_per_player"),
+                                              'max_pieces': self.response.get('max_pieces'), "padding": padding})
+
+            encrypted_tuple = self.player.aes_player_keys_dec[player_to_send_deck].encrypt_aes_gcm(encrypted_message)
+
+            msg = {'action': 'send_to_player', 'sender': self.player.name, 'rec': player_to_send_deck,
+                   'to_send': encrypted_tuple}
+        else:
+            msg = {'action': 'deanon_prep_over', "pub_key_list": pub_key_list}
+
+        return msg
+
+    def _handle_decipher_tiles(self):
+        tiles_to_decipher = self.response.get("ciphered_tiles")
+
+        for tuple_piece in self.player.tuple_keychains:
+            tile_to_decipher = tiles_to_decipher[tuple_piece[0]]
+            tile_index = tuple_piece[0]
+            cipher = self.player.tuple_keychains[tuple_piece]
+            tile, tile_key = pickle.loads(cipher.decrypt(tile_to_decipher))
+            if not hashFunctions.check_sha256_digest_from_list(tuple_piece[1], [str.encode(str(tile_index)), tile_key, str.encode(str(tile))]):
+                print(Colors.Red + "SERVER IS CHEATING!" + Colors.Color_Off)
+                exit(-1)
+            self.player.hand.append(tile)
+
+        print(Colors.Green + "Hand has been de-anonymized!" + Colors.Color_Off)
+        print("Hand ->", self.player.hand)
+        return {"action": "ready_to_play"}
+        exit(0)
+
     def _handle_secret_message(self):
         cipher = self.player.aes_player_keys_dec[self.response.get('sender')]
         encrypted_tuple = self.response.get('msg')
@@ -401,11 +486,9 @@ class Message:
         self.player.npieces = self.response.get("npieces")
         self.player.pieces_per_player = self.response.get("pieces_per_player")
         self.player.in_table = self.response.get("in_table")
-        self.player.deck = self.response.get("deck")
         player_name = self.response.get("next_player")
         if self.response.get("next_player") == self.player.name:
             player_name = Colors.BRed + "YOU" + Colors.Color_Off
-        print("deck -> " + ' '.join(map(str, self.player.deck)) + "\n")
         print("hand -> " + ' '.join(map(str, self.player.hand)))
         print("in table -> " + ' '.join(map(str, self.response.get("in_table"))) + "\n")
         print("Current player ->", player_name)
@@ -524,6 +607,21 @@ class Message:
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "keys_sent":
             response = self._handle_keys_sent()
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
+                              self.aes_cipher)
+            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "start_deanon_stage":
+            response = self._handle_start_deanon_stage()
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
+                              self.aes_cipher)
+            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "deanon_stage":
+            response = self._handle_deanon_stage()
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
+                              self.aes_cipher)
+            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "decipher_tiles":
+            response = self._handle_decipher_tiles()
             message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
                               self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)

@@ -12,7 +12,7 @@ sys.path.append(os.path.abspath(os.path.join('.')))
 sys.path.append(os.path.abspath(os.path.join('..')))
 
 import utils.Colors as Colors
-from security.asymCiphers import readPublicKeyFromPEM
+from security.asymCiphers import readPublicKeyFromPEM, RSAKeychain
 from security.symCiphers import AESCipher
 from itertools import combinations
 from security.CC_utils import validate_certificates
@@ -332,8 +332,8 @@ class Message:
         if self.game.init_validation_count < self.game.nplayers:
             return {"action": "wait", "msg": "Await further validation"}
         else:
-            # for player in self.game.players:
-            #    player.updatePieces(self.game.deck.pieces_per_player)
+            for player in self.game.players:
+                player.updatePieces(self.game.deck.pieces_per_player)
             msg_one = {"action": "reveal_keys", 'msg': Colors.BYellow + "Revealing your keys" + Colors.Color_Off}
             msg_two = {"action": "wait", 'msg': Colors.BYellow + "Revelation in Progress" + Colors.Color_Off}
             self.game.randomization_order = deque(self.game.randomization_order)
@@ -360,10 +360,54 @@ class Message:
                 self.send_all(msg_two)
                 return msg_two
             else:
-                print(Colors.BGreen + "Revelation Stage End!" + Colors.Color_Off)
+                self.game.players_waiting = 0
+                print(Colors.BGreen + "Revelation Stage End! Preparing for tile de-anonymization" + Colors.Color_Off)
+                padding = []
+                pub_key_list = []
+                dummy_key = RSAKeychain(1024)
+                # Create padding for the messages to keep size
+                for i in range(0, (self.game.nplayers * self.game.deck.pieces_per_player)):
+                    padding.append(os.urandom(sys.getsizeof(dummy_key.exportPubKey())))
+                for i in range(0, len(self.game.deck.pseudo_deck)):
+                    pub_key_list.append(None)
+                    padding.insert(0, None)
+
+                msg_one = {"action": "start_deanon_stage", "pub_key_list": pub_key_list,
+                           "pieces_per_player": self.game.deck.pieces_per_player,
+                           "max_pieces": (self.game.nplayers * self.game.deck.pieces_per_player), "padding": padding}
+
+                msg_two = {"action": "wait",
+                           "msg": Colors.BYellow + "Tile De-anonymization stage will start!" + Colors.Color_Off}
+
+                self.send_all(msg_two)
+                players_to_send = list(player_messages.keys())
+                random.shuffle(players_to_send)
+                self.send_to_player(players_to_send.pop(), msg_one)
+                return msg_two
                 return self._handle_ready_to_play()
         else:
             return {'action': 'wait', 'msg': Colors.BYellow + "Waiting for other players to reveal" + Colors.Color_Off}
+
+    def _handle_deanon_prep_over(self):
+        print(Colors.Green + "Translating anonymous tiles" + Colors.Color_Off)
+        pub_key_list = self.request.get("pub_key_list")
+        msg_list = []
+
+        for i in range(0, len(self.game.deck.deck)):
+            msg_list.append(None)
+
+        for key in pub_key_list:
+            if key is not None:
+                tile_index = pub_key_list.index(key)
+                tile_to_encrypt = self.game.deck.deck[tile_index]
+                key_to_encrypt = self.game.deck.pseudo_table[tile_index]
+                msg_to_encrypt = pickle.dumps((tile_to_encrypt, key_to_encrypt))
+                ciphertext = self.keychain.encrypt(msg_to_encrypt, readPublicKeyFromPEM(key))
+                msg_list[tile_index] = ciphertext
+
+        msg = {"action": "decipher_tiles", "ciphered_tiles": msg_list}
+        self.send_all(msg)
+        return msg
 
     def _handle_send_to_player(self):
         msg_to_send = {'action': 'secret_message', 'sender': self.request.get('sender'),
@@ -372,10 +416,19 @@ class Message:
         return {"action": 'wait', 'msg': Colors.BGreen + "Message sent" + Colors.Color_Off}
 
     def _handle_ready_to_play(self):
-        msg = {"action": "host_start_game",
-               "msg": Colors.BYellow + "The Host started the game" + Colors.Color_Off}
-        self.send_all(msg)
-        return msg
+        self.game.players_waiting += 1
+
+        if self.game.players_waiting >= self.game.nplayers:
+            self.game.players_waiting = 0
+            self.game.started = True
+            self.game.next_action = "play"
+
+            msg = {"action": "host_start_game",
+                   "msg": Colors.BYellow + "The Host started the game" + Colors.Color_Off}
+            self.send_all(msg)
+            return msg
+        else:
+            return {"action": "wait", "msg": Colors.Yellow + "Wait for other players" + Colors.Color_Off}
 
     def _handle_get_game_properties(self):
         self.game.players_ready = True
@@ -411,7 +464,6 @@ class Message:
         print("player pieces ", player.num_pieces)
         print("player " + player.name + " played " + str(self.request.get("piece")))
         print("in table -> " + ' '.join(map(str, self.game.deck.in_table)) + "\n")
-        print("deck -> " + ' '.join(map(str, self.game.deck.deck)) + "\n")
 
         if self.request.get("win"):
             if player.checkifWin():
@@ -482,6 +534,9 @@ class Message:
             self._set_selector_events_mask("r")
         elif action == "waiting_for_keys":
             content = self._handle_waiting_for_keys()
+            self._set_selector_events_mask("r")
+        elif action == "deanon_prep_over":
+            content = self._handle_deanon_prep_over()
             self._set_selector_events_mask("r")
         elif action == "ready_to_play":
             content = self._handle_ready_to_play()

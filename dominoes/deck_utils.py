@@ -25,6 +25,7 @@ class Player:
         self.pseudo_starting_stock = []
         self.nopiece = False
         self.player_registered = False
+        self.tuple_keychains = {}
 
     def __str__(self):
         return str(self.toJson())
@@ -105,10 +106,10 @@ class Player:
                 res = {"action": "play_piece", "piece": piece, "edge": edge, "win": self.checkifWin()}
             # if there is no piece to play try to pick a piece, if there is no piece to pick pass
             else:
-                if len(self.deck) > 0:
-                    res = self.pickPiece()
-                else:
-                    res = {"action": "pass_play", "piece": None, "edge": edge, "win": self.checkifWin()}
+                #if len(self.deck) > 0:
+                #    res = self.pickPiece()
+                #else:
+                res = {"action": "pass_play", "piece": None, "edge": edge, "win": self.checkifWin()}
             print("To play -> " + str(piece))
         return res
 
@@ -164,5 +165,4 @@ class Deck:
             self.pseudo_deck.append(pseudo_tuple)
 
     def toJson(self):
-        return {"npieces": self.npieces, "pieces_per_player": self.pieces_per_player, "in_table": self.in_table,
-                "deck": self.deck}
+        return {"npieces": self.npieces, "pieces_per_player": self.pieces_per_player, "in_table": self.in_table}
