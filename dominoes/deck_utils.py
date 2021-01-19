@@ -11,6 +11,7 @@ class Player:
         self.hand = []
         self.hand_commit = []
         self.encrypted_hand = []
+        self.server_aes_cipher = None
         self.aes_player_keys = {}
         self.aes_player_keys_dec = {}
         self.player_pub_keys = {}
@@ -26,6 +27,7 @@ class Player:
         self.nopiece = False
         self.player_registered = False
         self.tuple_keychains = {}
+        self.new_piece = None
 
     def __str__(self):
         return str(self.toJson())
@@ -44,6 +46,12 @@ class Player:
         self.insertInHand(piece)
         return {"action": "get_piece", "deck": self.deck}
 
+    def pickAnonPiece(self):
+        random.shuffle(self.pseudo_starting_stock)
+        self.new_piece = self.pseudo_starting_stock.pop()
+
+        return {"action": "request_piece_reveal", 'new_piece': self.new_piece, 'new_stock': self.pseudo_starting_stock}
+
     def updatePieces(self, i):
         self.num_pieces += i
 
@@ -61,6 +69,7 @@ class Player:
 
     def play(self):
         res = {}
+        print("Player Pieces", self.num_pieces)
         if self.in_table == []:
             print("Empty table")
             piece = self.hand.pop()
@@ -106,10 +115,10 @@ class Player:
                 res = {"action": "play_piece", "piece": piece, "edge": edge, "win": self.checkifWin()}
             # if there is no piece to play try to pick a piece, if there is no piece to pick pass
             else:
-                #if len(self.deck) > 0:
-                #    res = self.pickPiece()
-                #else:
-                res = {"action": "pass_play", "piece": None, "edge": edge, "win": self.checkifWin()}
+                if len(self.pseudo_starting_stock) > 0:
+                    res = self.pickAnonPiece()
+                else:
+                    res = {"action": "pass_play", "piece": None, "edge": edge, "win": self.checkifWin()}
             print("To play -> " + str(piece))
         return res
 
@@ -160,7 +169,8 @@ class Deck:
             tile_index = self.deck.index(tile)
             tile_key = keygen.generate_key(keygen.get_random_alphanumeric_string(8))
             self.pseudo_table.append(tile_key)
-            tile_hash = hashFunctions.get_sha256_digest_from_list([str.encode(str(tile_index)), tile_key, str.encode(str(tile))])
+            tile_hash = hashFunctions.get_sha256_digest_from_list(
+                [str.encode(str(tile_index)), tile_key, str.encode(str(tile))])
             pseudo_tuple = (tile_index, tile_hash)
             self.pseudo_deck.append(pseudo_tuple)
 

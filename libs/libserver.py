@@ -208,8 +208,10 @@ class Message:
                     self.send_all(msg)
                     msg["session_key"] = encrypted_secret
 
+
                     # check if table is full
                     if self.game.isFull():
+                        self.send_to_player(self.player_nickname, msg)
                         print(Colors.BIPurple + "The game is Full" + Colors.Color_Off)
                         sub_player_PEM = {}
                         pair_dict = {}
@@ -347,6 +349,17 @@ class Message:
         self.send_all(msg)
         return {"action": "keys_sent", "msg": "Keys were sent"}
 
+    def _handle_revealed_key_for_piece(self):
+        self.game.randomization_order.rotate(1)
+        more = False
+        if self.game.randomization_order[-1] != self.game.first_in_randomization:
+            more = True
+
+        msg = {"action": "piece_key_to_reveal", "key_dict": self.request.get("key_dict"), "more": more}
+        self.send_to_player(self.game.currentPlayer().name, msg)
+        self.game.randomization_order[-1]
+        return {"action": "wait", "msg": "Keys were sent"}
+
     def _handle_waiting_for_keys(self):
         self.game.players_waiting += 1
         if self.game.players_waiting >= self.game.nplayers:
@@ -409,6 +422,20 @@ class Message:
         self.send_all(msg)
         return msg
 
+    def _handle_request_piece_deanon(self, c_player):
+        print(Colors.Green + "Translating anonymous tile" + Colors.Color_Off)
+
+        tile_index, tile = self.request.get("piece")
+
+        tile_to_encrypt = self.game.deck.deck[tile_index]
+        key_to_encrypt = self.game.deck.pseudo_table[tile_index]
+        msg_to_encrypt = pickle.dumps((tile_to_encrypt, key_to_encrypt))
+        msg_to_send = {"action": "insert_in_hand", "new_tile": msg_to_encrypt}
+
+        ciphered_message = self.player_aes.encrypt_aes_gcm(pickle.dumps(msg_to_send))
+
+        return {"action": "secret_message", "sender": "server", "msg": ciphered_message}
+
     def _handle_send_to_player(self):
         msg_to_send = {'action': 'secret_message', 'sender': self.request.get('sender'),
                        'msg': self.request.get('to_send')}
@@ -435,6 +462,20 @@ class Message:
         msg = {"action": "rcv_game_properties"}
         msg.update(self.game.toJson())
         return msg
+
+    def _handle_request_piece_reveal(self, player):
+        if self.game.randomization_order[-1] == self.game.first_in_randomization:
+            player.updatePieces(1)
+            self.game.deck.init_stock = self.request.get("new_stock")
+
+        msg_one = {"action": "reveal_piece_key", "new_piece": self.request.get('new_piece'),
+                   'new_stock': self.request.get("new_stock"), 'key_dict': {},
+                   'msg': Colors.BYellow + "Revealing your key" + Colors.Color_Off}
+        msg_two = {"action": "wait", 'msg': Colors.BYellow + "Player" + self.player_nickname +
+                                            " has requested a piece. Revelation in Progress" + Colors.Color_Off}
+        self.send_to_player(self.game.randomization_order[-1], msg_one)
+        self.send_all(msg_two)
+        return msg_two
 
     def _handle_get_piece(self, player):
         self.game.deck.deck = self.request.get("deck")
@@ -471,7 +512,7 @@ class Message:
                     for piece in player.hand:
                         score = piece.values[0].value + piece.values[1].value
                 print(Colors.BGreen + " WINNER " + player.name + Colors.Color_Off)
-                msg = {"action": "end_game", "winner": player.name, "score": score}
+                msg = {"action": "end_game", "winner": player.name, "score": None}
         else:
             msg = {"action": "rcv_game_properties"}
         msg.update(self.game.toJson())
@@ -555,6 +596,12 @@ class Message:
                 if action == "get_piece":
                     content = self._handle_get_piece(c_player)
                     self._set_selector_events_mask("r")
+                elif action == "request_piece_reveal":
+                    content = self._handle_request_piece_reveal(c_player)
+                    self._set_selector_events_mask("r")
+                elif action == "request_piece_deanon":
+                    content = self._handle_request_piece_deanon(c_player)
+                    self._set_selector_events_mask("r")
                 elif action == "play_piece":
                     content = self._handle_play_piece(c_player)
                     self._set_selector_events_mask("r")
@@ -563,6 +610,10 @@ class Message:
                     self._set_selector_events_mask("r")
             else:
                 content = {"action": "wait", "msg": Colors.BRed + "Not Your Turn" + Colors.Color_Off}
+
+            if action == "revealed_key_for_piece":
+                content = self._handle_revealed_key_for_piece()
+                self._set_selector_events_mask("r")
 
         response = {
             "content_bytes": self._pickle_encode(content),

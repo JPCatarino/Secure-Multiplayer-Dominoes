@@ -172,13 +172,16 @@ class Message:
     def _handle_you_host(self):
         aes_secret = self.keychain.decrypt(self.response.get("session_key"))
         self.aes_cipher = AESCipher(aes_secret)
+        print("Session", aes_secret)
+        self.player.server_aes_cipher = AESCipher(aes_secret)
         self.player.host = True
 
     def _handle_new_player(self):
         if "session_key" in self.response:
             aes_secret = self.keychain.decrypt(self.response.get("session_key"))
-            print(aes_secret)
+            print("Session", aes_secret)
             self.aes_cipher = AESCipher(aes_secret)
+            self.player.server_aes_cipher = AESCipher(aes_secret)
         print(self.response.get("msg"))
         print("There are " + str(self.response.get("nplayers")) + "\\" + str(self.response.get("game_players")))
 
@@ -386,6 +389,27 @@ class Message:
 
         return {"action": "waiting_for_keys"}
 
+    def _handle_piece_key_to_reveal(self):
+        key_tuple_dict = self.response.get("key_dict")
+
+        print(Colors.BYellow + "Revealing Piece" + Colors.Color_Off)
+
+        for tuple_piece in key_tuple_dict:
+            if tuple_piece[0] == self.player.new_piece:
+                decipher = AESCipher(key_tuple_dict[tuple_piece])
+                deciphered_piece = pickle.loads(decipher.decrypt_aes_gcm(tuple_piece))
+
+        self.player.new_piece = deciphered_piece
+
+        if self.response.get("more"):
+            msg = {"action": "request_piece_reveal", 'new_piece': self.player.new_piece,
+                   'new_stock': self.player.pseudo_starting_stock}
+        else:
+            # Maybe needs to go ciphered for safety reasons?
+            msg = {"action": "request_piece_deanon", "piece": deciphered_piece}
+
+        return msg
+
     def _handle_keys_sent(self):
         return {'action': 'waiting_for_keys'}
 
@@ -463,23 +487,57 @@ class Message:
             tile_index = tuple_piece[0]
             cipher = self.player.tuple_keychains[tuple_piece]
             tile, tile_key = pickle.loads(cipher.decrypt(tile_to_decipher))
-            if not hashFunctions.check_sha256_digest_from_list(tuple_piece[1], [str.encode(str(tile_index)), tile_key, str.encode(str(tile))]):
+            if not hashFunctions.check_sha256_digest_from_list(tuple_piece[1], [str.encode(str(tile_index)), tile_key,
+                                                                                str.encode(str(tile))]):
                 print(Colors.Red + "SERVER IS CHEATING!" + Colors.Color_Off)
                 exit(-1)
-            self.player.hand.append(tile)
+            self.player.insertInHand(tile)
 
         print(Colors.Green + "Hand has been de-anonymized!" + Colors.Color_Off)
         print("Hand ->", self.player.hand)
         return {"action": "ready_to_play"}
-        exit(0)
+
+    def _handle_reveal_piece_key(self):
+        key_tuple_dict = {}
+        self.player.pseudo_starting_stock = self.response.get("new_stock")
+
+        key_to_send = [keys for keys in self.player.randomized_tuple_mapping.keys() if
+                       self.player.randomized_tuple_mapping[keys][0] in self.response.get("new_piece")]
+
+        for key in key_to_send:
+            key_tuple_dict[self.player.randomized_tuple_mapping[key]] = key
+
+        print('size', sys.getsizeof(key_tuple_dict))
+        print('dict', key_tuple_dict)
+
+        return {'action': 'revealed_key_for_piece', 'key_dict': key_tuple_dict}
 
     def _handle_secret_message(self):
-        cipher = self.player.aes_player_keys_dec[self.response.get('sender')]
+        if self.response.get('sender') == "server":
+            cipher = self.player.server_aes_cipher
+        else:
+            cipher = self.player.aes_player_keys_dec[self.response.get('sender')]
+
         encrypted_tuple = self.response.get('msg')
 
         deciphered_msg = pickle.loads(cipher.decrypt_aes_gcm(encrypted_tuple))
 
         return deciphered_msg
+
+    def _handle_insert_in_hand(self):
+        print("wtf", pickle.loads(self.response.get("new_tile")))
+        tile, key = pickle.loads(self.response.get("new_tile"))
+        print(Colors.Yellow + "Checking if server is not cheating" + Colors.Color_Off)
+        if not hashFunctions.check_sha256_digest_from_list(self.player.new_piece[1],
+                                                           [str.encode(str(self.player.new_piece[0])), key,
+                                                            str.encode(str(tile))]):
+            print(Colors.Red + "SERVER IS CHEATING!" + Colors.Color_Off)
+            exit(-1)
+
+        print(Colors.Green + "Tile is valid. Inserting in hand" + Colors.Color_Off, tile)
+        self.player.insertInHand(tile)
+
+        return self.player.play()
 
     def _handle_rcv_game_properties(self):
         self.player.nplayers = self.response.get("nplayers")
@@ -622,6 +680,21 @@ class Message:
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "decipher_tiles":
             response = self._handle_decipher_tiles()
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
+                              self.aes_cipher)
+            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "reveal_piece_key":
+            response = self._handle_reveal_piece_key()
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
+                              self.aes_cipher)
+            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "piece_key_to_reveal":
+            response = self._handle_piece_key_to_reveal()
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
+                              self.aes_cipher)
+            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "insert_in_hand":
+            response = self._handle_insert_in_hand()
             message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
                               self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
