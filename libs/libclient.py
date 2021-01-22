@@ -537,7 +537,6 @@ class Message:
         return deciphered_msg
 
     def _handle_insert_in_hand(self):
-        print("wtf", pickle.loads(self.response.get("new_tile")))
         tile, key = pickle.loads(self.response.get("new_tile"))
         print(Colors.Yellow + "Checking if server is not cheating" + Colors.Color_Off)
         if not hashFunctions.check_sha256_digest_from_list(self.player.new_piece[1],
