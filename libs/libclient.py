@@ -293,18 +293,29 @@ class Message:
         pseudo_deck = self.response.get("deck")
         padding = self.response.get("padding")
         self.player.npieces = self.response.get("pieces_per_player")
+        print(Colors.Yellow + "Do you pick, substitute or pass?" + Colors.Color_Off)
 
         players_nicks = list(self.player.aes_player_keys_dec.keys())
 
         if len(self.player.encrypted_hand) < self.player.npieces:
             if random.random() < 0.60:
+                print(Colors.Green + "Selecting a piece" + Colors.Color_Off)
                 random.shuffle(pseudo_deck)
                 padding.append(os.urandom(sys.getsizeof(pseudo_deck[-1])))
                 self.player.encrypted_hand.append(pseudo_deck.pop())
-            elif random.random() < 0.50:
+            elif random.random() < 0.50 and len(self.player.encrypted_hand) > 0:
                 # Substitute already selected pieces
-                pass
+                number_of_pieces_to_sub = random.randint(1, len(self.player.encrypted_hand))
+                print(Colors.Green + "Substituting", number_of_pieces_to_sub, "pieces" + Colors.Color_Off)
+
+                # For a certain number of pieces, take a new piece from deck and add one from hand.
+                for piece in range(0, number_of_pieces_to_sub):
+                    piece_to_put_in_deck = self.player.encrypted_hand.pop()
+                    self.player.encrypted_hand.append(pseudo_deck.pop())
+                    pseudo_deck.append(piece_to_put_in_deck)
+                    random.shuffle(pseudo_deck)
             else:
+                print(Colors.Green + "Passing" + Colors.Color_Off)
                 random.shuffle(pseudo_deck)
 
         if len(pseudo_deck) > self.response.get("stock_low"):
@@ -319,6 +330,7 @@ class Message:
             msg = {'action': 'send_to_player', 'sender': self.player.name, 'rec': player_to_send_deck,
                    'to_send': encrypted_tuple}
         else:
+            print(Colors.Green + "Stock has reached low level. Stopping selection" + Colors.Color_Off)
             msg = {'action': 'selection_over', "deck": pseudo_deck}
 
         return msg
