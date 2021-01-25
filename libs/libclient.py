@@ -548,7 +548,11 @@ class Message:
         print(Colors.Green + "Tile is valid. Inserting in hand" + Colors.Color_Off, tile)
         self.player.insertInHand(tile)
 
-        return self.player.play()
+        msg = self.player.play()
+        if msg.get("action") == 'play_piece':
+            piece_signature = self.keychain.sign(pickle.dumps(msg.get("piece")))
+            msg.update({"signed_piece": piece_signature})
+        return msg
 
     def _handle_rcv_game_properties(self):
         self.player.nplayers = self.response.get("nplayers")
@@ -556,6 +560,17 @@ class Message:
         self.player.pieces_per_player = self.response.get("pieces_per_player")
         self.player.in_table = self.response.get("in_table")
         player_name = self.response.get("next_player")
+
+        if "signed_piece" in self.response and self.response.get("last_player") != self.player.name:
+            print(Colors.Yellow + "Validating last played piece signature" + Colors.Color_Off)
+            signed_piece = self.response.get("signed_piece")
+            last_piece_played = self.response.get("last_piece")
+            last_player = self.response.get("last_player")
+            if not self.keychain.verify_sign(pickle.dumps(last_piece_played), signed_piece, readPublicKeyFromPEM(self.player.player_pub_keys[last_player])):
+                print(Colors.Red + "This signature is not valid" + Colors.Color_Off)
+                exit(-1)
+            print(Colors.Green + "Last play signature is valid!" + Colors.Color_Off)
+
         if self.response.get("next_player") == self.player.name:
             player_name = Colors.BRed + "YOU" + Colors.Color_Off
         print("hand -> " + ' '.join(map(str, self.player.hand)))
@@ -575,6 +590,9 @@ class Message:
             if self.response.get("next_action") == "play":
                 # input(Colors.BGreen+"Press ENter \n\n"+Colors.Color_Off)
                 msg = self.player.play()
+                if msg.get("action") == 'play_piece':
+                    piece_signature = self.keychain.sign(pickle.dumps(msg.get("piece")))
+                    msg.update({"signed_piece": piece_signature})
                 return msg
 
     def _handle_end_game(self):

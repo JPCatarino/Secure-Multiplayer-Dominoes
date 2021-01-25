@@ -495,6 +495,14 @@ class Message:
     def _handle_play_piece(self, player):
         next_p = self.game.nextPlayer()
         if self.request.get("piece") is not None:
+            signed_piece = self.request.get("signed_piece")
+            print(Colors.Yellow + "Validating Play Signature..." + Colors.Color_Off)
+            if not self.keychain.verify_sign(pickle.dumps(self.request.get("piece")), signed_piece, self.player_key):
+                self.send_all({"action": "wait", "msg": Colors.BRed + "Player" + self.player_nickname +
+                                                        "sent an invalid signature!" + Colors.Color_Off})
+                exit(-1)
+            print(Colors.Green + "Play Signature validated!" + Colors.Color_Off)
+
             player.nopiece = False
             player.updatePieces(-1)
             if self.request.get("edge") == 0:
@@ -515,6 +523,10 @@ class Message:
                 msg = {"action": "end_game", "winner": player.name, "score": None}
         else:
             msg = {"action": "rcv_game_properties"}
+            if "signed_piece" in self.request:
+                msg.update({"last_piece": self.request.get("piece")})
+                msg.update({"last_player": self.player_nickname})
+                msg.update({"signed_piece": self.request.get("signed_piece")})
         msg.update(self.game.toJson())
         self.send_all(msg)
         return msg
