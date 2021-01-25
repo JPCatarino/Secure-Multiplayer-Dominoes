@@ -25,7 +25,7 @@ player_messages = {}
 
 class Message:
     def __init__(self, selector, sock, addr, game, player_list, keychain, player_keys_dict, player_keys_dict_PEM,
-                 signed_nicks, certs):
+                 signed_nicks, certs, score):
         self.selector = selector
         self.sock = sock
         self.addr = addr
@@ -45,6 +45,7 @@ class Message:
         self.response_created = False
         self._response_sent = False
         self.game_started = False
+        self.score = score
 
     def process_events(self, mask):
         if mask & selectors.EVENT_READ:
@@ -508,11 +509,9 @@ class Message:
 
         if self.request.get("win"):
             if player.checkifWin():
-                for player in self.game.players:
-                    for piece in player.hand:
-                        score = piece.values[0].value + piece.values[1].value
                 print(Colors.BGreen + " WINNER " + player.name + Colors.Color_Off)
-                msg = {"action": "end_game", "winner": player.name, "score": None}
+                #msg = {"action": "end_game", "winner": player.name, "score": None}
+                msg = {"action": "report_score", "winner": player.name}
         else:
             msg = {"action": "rcv_game_properties"}
         msg.update(self.game.toJson())
@@ -534,6 +533,14 @@ class Message:
 
         self.send_all(msg)
         return msg
+
+    def _handle_score_report(self):
+        if self.request.get("hand"):
+            for piece in self.request.get("hand"):
+                self.score = piece.values[0].value + piece.values[1].value
+        msg = {"action": "end_game", "winner": self.request.get("winner"), "score": self.score}
+        self.send_all(msg)
+        return {"action": "wait", "msg": Colors.BYellow + "Waiting for Scores" + Colors.Color_Off}
 
     def _create_response_json_content(self):
         # ADD HERE MORE MESSSAGES
@@ -587,6 +594,9 @@ class Message:
             self._set_selector_events_mask("r")
         elif action == "send_to_player":
             content = self._handle_send_to_player()
+            self._set_selector_events_mask("r")
+        elif action == "score_report":
+            content = self._handle_score_report()
             self._set_selector_events_mask("r")
         else:
             content = {"result": f'Error: invalid action "{action}".'}

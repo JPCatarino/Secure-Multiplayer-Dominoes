@@ -576,6 +576,10 @@ class Message:
                 # input(Colors.BGreen+"Press ENter \n\n"+Colors.Color_Off)
                 msg = self.player.play()
                 return msg
+    
+    def _handle_report_score(self):
+        msg = {"action": "score_report", "hand" : self.player.hand, "hand_commit": self.player.hand_commit, "winner": self.response.get("winner")}
+        return msg
 
     def _handle_end_game(self):
         winner = self.response.get("winner")
@@ -584,7 +588,8 @@ class Message:
             winner = Colors.BRed + "YOU" + Colors.Color_Off
         else:
             winner = Colors.BBlue + winner + Colors.Color_Off
-        print(Colors.BGreen + "End GAME, THE WINNER IS: " + winner + "Score:" + str(score))
+        print(Colors.BGreen + "End GAME, THE WINNER IS: " + winner)
+        print(Colors.ICyan + "Score: " + str(score) + Colors.Color_Off)
 
     def _handle_wait(self):
         print(self.response.get("msg"))
@@ -714,6 +719,12 @@ class Message:
             if response is not None:
                 message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
                                   self.aes_cipher)
+                self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "report_score":
+            response = self._handle_report_score()
+            if response is not None:
+                message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
+                                        self.aes_cipher)
                 self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "end_game":
             self._handle_end_game()
