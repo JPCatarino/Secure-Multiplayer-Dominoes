@@ -21,7 +21,7 @@ from security.hashFunctions import *
 # Main socket code from https://realpython.com/python-sockets/
 
 class Message:
-    def __init__(self, selector, sock, addr, request, player, keychain, player_cc, aes_cipher=None):
+    def __init__(self, selector, sock, addr, request, player, keychain, player_cc, aes_cipher=None, cheater=None):
         self.selector = selector
         self.sock = sock
         self.addr = addr
@@ -36,6 +36,7 @@ class Message:
         self._send_buffer = b""
         self._request_queued = False
         self.response = None
+        self.cheater = cheater
 
     def process_events(self, mask):
         if mask & selectors.EVENT_READ:
@@ -166,7 +167,7 @@ class Message:
         print("Your name is " + Colors.BBlue + nickname + Colors.Color_Off)
         msg = {"action": "req_login", "pubkey": self.keychain.exportPubKey(), "msg": nickname,
                "signed_nick": signed_nick, "cert": cert}
-        self.player = Player(nickname, self.sock)
+        self.player = Player(nickname, self.sock, self.cheater)
         return msg
 
     def _handle_you_host(self):
@@ -575,6 +576,11 @@ class Message:
                 exit(-1)
             print(Colors.Green + "Last play signature is valid!" + Colors.Color_Off)
 
+            if(self.player.validate(last_piece_played)):
+                print("Legal Play")
+            else:
+                print("Cheated!")
+
         if self.response.get("next_player") == self.player.name:
             player_name = Colors.BRed + "YOU" + Colors.Color_Off
         print("hand -> " + ' '.join(map(str, self.player.hand)))
@@ -593,7 +599,10 @@ class Message:
                     return msg
             if self.response.get("next_action") == "play":
                 # input(Colors.BGreen+"Press ENter \n\n"+Colors.Color_Off)
-                msg = self.player.play()
+                if(self.player.isCheater):
+                    msg = self.player.cheat_play()
+                else:
+                    msg = self.player.play()
                 if msg.get("action") == 'play_piece':
                     piece_signature = self.keychain.sign(pickle.dumps(msg.get("piece")))
                     msg.update({"signed_piece": piece_signature})
