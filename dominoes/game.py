@@ -3,7 +3,10 @@ from dominoes.deck_utils import Deck, Player
 
 class Game:
     def __init__(self, max_players):
-        self.deck = Deck()
+        if max_players > 2:
+            self.deck = Deck(5)
+        else:
+            self.deck = Deck(7)
         print("Deck created \n", self.deck)
         self.max_players = max_players
         self.nplayers = 0
