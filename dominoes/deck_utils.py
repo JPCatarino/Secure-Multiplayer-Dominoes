@@ -134,6 +134,15 @@ class Piece:
     def __str__(self):
         return " {}:{}".format(str(self.values[0]), str(self.values[1]))
 
+    def __eq__(self, other):
+        if not isinstance(other, Piece):
+            # don't attempt to compare against unrelated types
+            return NotImplemented
+
+        return (self.values[0].value == other.values[0].value and self.values[1].value == other.values[1].value) or \
+               (self.values[0].value == other.values[1].value and self.values[1].value == other.values[0].value) or \
+               (self.values[1].value == other.values[0].value and self.values[0].value == other.values[1].value)
+
     def flip(self):
         self.values = [self.values[1], self.values[0]]
 

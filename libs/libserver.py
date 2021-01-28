@@ -522,8 +522,8 @@ class Message:
                 self.game.players_ready = False
                 self.game_winner = player.name
                 # msg = {"action": "end_game", "winner": player.name, "score": None}
-                msg = {"action": "report_score", "winner": player.name}
-                #msg = {"action": "reveal_everything"}
+                # msg = {"action": "report_score", "winner": player.name}
+                msg = {"action": "reveal_everything"}
         else:
             msg = {"action": "rcv_game_properties"}
             if "signed_piece" in self.request:
@@ -539,9 +539,9 @@ class Message:
         # If the player passed the previous move
         if player.nopiece:
             print("No piece END")
-            msg = {"action": "end_game", "winner": Colors.BYellow + "TIE" + Colors.Color_Off}
+            # msg = {"action": "end_game", "winner": Colors.BYellow + "TIE" + Colors.Color_Off}
             self.game.players_ready = False
-            #msg = {"action": "reveal_everything"}
+            msg = {"action": "reveal_everything"}
         # Update the variable nopiece so that the server can know if the player has passed the previous move
         else:
             print("No piece")
@@ -604,9 +604,8 @@ class Message:
 
             for player_name in self.game.player_initial_hands:
                 player_played_pieces = self.game.players_played_pieces[player_name]
-
                 for tile in player_played_pieces:
-                    if tile not in self.game.player_initial_hands:
+                    if tile not in self.game.player_initial_hands[player_name]:
                         print(Colors.Red + player_name + " played a piece not in his hand" + Colors.Color_Off)
                         exit(-1)
 
