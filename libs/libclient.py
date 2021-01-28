@@ -599,7 +599,10 @@ class Message:
                     return msg
             if self.response.get("next_action") == "play":
                 # input(Colors.BGreen+"Press ENter \n\n"+Colors.Color_Off)
-                msg = self.player.play()
+                if(self.player.isCheater):
+                    msg = self.player.cheat_play()
+                else:
+                    msg = self.player.play()
                 if msg.get("action") == 'play_piece':
                     piece_signature = self.keychain.sign(pickle.dumps(msg.get("piece")))
                     msg.update({"signed_piece": piece_signature})
