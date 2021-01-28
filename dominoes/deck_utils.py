@@ -5,7 +5,7 @@ from security import hashFunctions
 
 
 class Player:
-    def __init__(self, name, socket, pieces_per_player=None):
+    def __init__(self, name, socket, cheater, pieces_per_player=None):
         self.name = name
         self.socket = socket
         self.hand = []
@@ -25,9 +25,13 @@ class Player:
         self.deck = []
         self.pseudo_starting_stock = []
         self.nopiece = False
+
         self.player_registered = False
         self.tuple_keychains = {}
         self.new_piece = None
+
+        self.isCheater = cheater
+
 
     def __str__(self):
         return str(self.toJson())
@@ -122,6 +126,88 @@ class Player:
             print("To play -> " + str(piece))
         return res
 
+    def cheat_play(self):
+        res = {}
+        if self.in_table == []:
+            print("Empty table")
+            piece = self.hand.pop()
+            self.updatePieces(-1)
+            res = {"action": "play_piece", "piece": piece, "edge": 0, "win": False}
+        else:
+            edges = self.in_table[0].values[0].value, self.in_table[len(self.in_table) - 1].values[1].value
+            print(str(edges[0]) + " " + str(edges[1]))
+            max = 0
+            index = 0
+            edge = None
+            flip = False
+            # get if possible the best piece to play and the correspondent assigned edge
+            for i, piece in enumerate(self.hand):
+                aux = int(piece.values[0].value) + int(piece.values[1].value)
+                if aux > max:
+                    if int(piece.values[0].value) == int(edges[0]):
+                        max = aux
+                        index = i
+                        flip = True
+                        edge = 0
+                    elif int(piece.values[1].value) == int(edges[0]):
+                        max = aux
+                        index = i
+                        flip = False
+                        edge = 0
+                    elif int(piece.values[0].value) == int(edges[1]):
+                        max = aux
+                        index = i
+                        flip = False
+                        edge = 1
+                    elif int(piece.values[1].value) == int(edges[1]):
+                        max = aux
+                        index = i
+                        flip = True
+                        edge = 1
+            # if there is a piece to play, remove the piece from the hand and check if the orientation is the correct
+            if edge is not None:
+                piece = self.hand.pop(index)
+                if flip:
+                    piece.flip()
+                self.updatePieces(-1)
+                res = {"action": "play_piece", "piece": piece, "edge": edge, "win": self.checkifWin()}
+
+            # if there is no piece to play try to cheat. No need to pick/pass, because...who needs that?
+            else:
+                #verificar as peças da mesa e ver que números edge que estão na jogada
+                #trocar uma da mão para a tornar jogável
+                #jogar essa peça
+                edges = self.in_table[0].values[0].value, self.in_table[len(self.in_table) - 1].values[1].value
+                pieceToSwitch = self.hand.pop(len(self.hand))
+                self.updatePieces(-1)
+                cheatedPiece = Piece(edges[0], edges[1])
+                self.insertInHand(cheatedPiece)
+
+                piece = self.hand.pop(cheatedPiece)
+                if flip:
+                    piece.flip()
+                self.updatePieces(-1)
+                res = {"action": "play_piece", "piece": cheatedPiece, "edge": edge, "win": self.checkifWin()}
+            print("To play -> " + str(piece))
+        return res
+
+    def validate(self, piece):
+        valid_play = []
+        for pc in self.in_table:
+            if (piece.values[0].value == pc.values[0].value) and (piece.values[1].value == pc.values[1].value):
+                valid_play[0] = False   #illegal move, piece already played in table
+            else:
+                for pc in self.hand:
+                    if (piece.values[0].value == pc.values[0].value) and (piece.values[1].value == pc.values[1].value):
+                        valid_play[1] = False  # illegal move, piece in someone's hands
+                    else:
+                        valid_play[0] = True
+                        valid_play[1] = True
+
+        if valid_play[0] == valid_play[1] == True:
+            return True   #legal play
+        else:
+            return False  #ilegal play
 
 class Piece:
     values = []

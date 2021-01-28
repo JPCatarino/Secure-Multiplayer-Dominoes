@@ -30,7 +30,7 @@ def start_connections(host, port):
     sock.connect_ex(addr)
     events = selectors.EVENT_READ | selectors.EVENT_WRITE
     request = create_request("hello")
-    message = Message(sel, sock, addr, request, PLAYER, PLAYER_KEYCHAIN, PLAYER_CC)
+    message = Message(sel, sock, addr, request, PLAYER, PLAYER_KEYCHAIN, PLAYER_CC, cheater=args.cheater)
     sel.register(sock, events, data=message)
 
 def create_request(action):
@@ -62,6 +62,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--ip', type=str, help='Server IP', required=False, default= '127.0.0.1')
     parser.add_argument('-p', '--port', type=int, help='Server Port', required=False, default= '5000')
+    parser.add_argument('-c', '--cheater', type=bool, help='Client Cheater', required=False, default='False')
     args = parser.parse_args()
 
 

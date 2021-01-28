@@ -21,7 +21,7 @@ from security.hashFunctions import *
 # Main socket code from https://realpython.com/python-sockets/
 
 class Message:
-    def __init__(self, selector, sock, addr, request, player, keychain, player_cc, aes_cipher=None):
+    def __init__(self, selector, sock, addr, request, player, keychain, player_cc, aes_cipher=None, cheater=None):
         self.selector = selector
         self.sock = sock
         self.addr = addr
@@ -36,6 +36,7 @@ class Message:
         self._send_buffer = b""
         self._request_queued = False
         self.response = None
+        self.cheater = cheater
 
     def process_events(self, mask):
         if mask & selectors.EVENT_READ:
@@ -166,7 +167,7 @@ class Message:
         print("Your name is " + Colors.BBlue + nickname + Colors.Color_Off)
         msg = {"action": "req_login", "pubkey": self.keychain.exportPubKey(), "msg": nickname,
                "signed_nick": signed_nick, "cert": cert}
-        self.player = Player(nickname, self.sock)
+        self.player = Player(nickname, self.sock, self.cheater)
         return msg
 
     def _handle_you_host(self):
