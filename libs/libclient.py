@@ -576,6 +576,11 @@ class Message:
                 exit(-1)
             print(Colors.Green + "Last play signature is valid!" + Colors.Color_Off)
 
+            if(self.player.validate(last_piece_played)):
+                print("Legal Play")
+            else:
+                print("Cheated!")
+
         if self.response.get("next_player") == self.player.name:
             player_name = Colors.BRed + "YOU" + Colors.Color_Off
         print("hand -> " + ' '.join(map(str, self.player.hand)))
