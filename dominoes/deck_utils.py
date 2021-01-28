@@ -180,12 +180,12 @@ class Player:
                 #trocar uma da mão para a tornar jogável
                 #jogar essa peça
                 edges = self.in_table[0].values[0].value, self.in_table[len(self.in_table) - 1].values[1].value
-                pieceToSwitch = self.hand.pop(len(self.hand))
+                pieceToSwitch = self.hand.pop()
                 self.updatePieces(-1)
                 cheatedPiece = Piece(edges[0], edges[1])
                 self.insertInHand(cheatedPiece)
 
-                piece = self.hand.pop(cheatedPiece)
+                piece = self.hand.pop(self.hand.index(cheatedPiece))
                 if flip:
                     piece.flip()
                 self.updatePieces(-1)
@@ -194,13 +194,13 @@ class Player:
         return res
 
     def validate(self, piece):
-        valid_play = []
+        valid_play = [None]*2
         for pc in self.in_table:
-            if (piece.values[0].value == pc.values[0].value) and (piece.values[1].value == pc.values[1].value):
+            if piece == pc:
                 valid_play[0] = False   #illegal move, piece already played in table
             else:
                 for pc in self.hand:
-                    if (piece.values[0].value == pc.values[0].value) and (piece.values[1].value == pc.values[1].value):
+                    if piece == pc:
                         valid_play[1] = False  # illegal move, piece in someone's hands
                     else:
                         valid_play[0] = True

@@ -599,7 +599,7 @@ class Message:
                     return msg
             if self.response.get("next_action") == "play":
                 # input(Colors.BGreen+"Press ENter \n\n"+Colors.Color_Off)
-                if(self.player.isCheater):
+                if self.player.isCheater:
                     msg = self.player.cheat_play()
                 else:
                     msg = self.player.play()

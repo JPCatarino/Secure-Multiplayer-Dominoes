@@ -541,6 +541,7 @@ class Message:
             print("No piece END")
             # msg = {"action": "end_game", "winner": Colors.BYellow + "TIE" + Colors.Color_Off}
             self.game.players_ready = False
+            self.game.game_winner = "TIE"
             msg = {"action": "reveal_everything"}
         # Update the variable nopiece so that the server can know if the player has passed the previous move
         else:
@@ -612,7 +613,7 @@ class Message:
                 print(Colors.Green + player_name + " played only valid tiles" + Colors.Color_Off)
 
             print("Everything Valid, proceeding to score")
-            msg = {"action": "report_score", "winner": self.game_winner}
+            msg = {"action": "report_score", "winner": self.game.game_winner}
             self.send_all(msg)
             return msg
 
