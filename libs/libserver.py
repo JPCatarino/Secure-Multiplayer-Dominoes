@@ -445,6 +445,7 @@ class Message:
 
     def _handle_ready_to_play(self):
         self.game.players_waiting += 1
+        self.game.players_played_pieces[self.player_nickname] = []
 
         if self.game.players_waiting >= self.game.nplayers:
             self.game.players_waiting = 0
@@ -503,7 +504,7 @@ class Message:
                                                         "sent an invalid signature!" + Colors.Color_Off})
                 exit(-1)
             print(Colors.Green + "Play Signature validated!" + Colors.Color_Off)
-
+            self.game.players_played_pieces[self.player_nickname].append(self.request.get("piece"))
             player.nopiece = False
             player.updatePieces(-1)
             if self.request.get("edge") == 0:
@@ -519,6 +520,7 @@ class Message:
             if player.checkifWin():
                 print(Colors.BGreen + " WINNER " + player.name + Colors.Color_Off)
                 #msg = {"action": "end_game", "winner": player.name, "score": None}
+                print("penis", self.game.players_played_pieces)
                 msg = {"action": "report_score", "winner": player.name}
         else:
             msg = {"action": "rcv_game_properties"}
@@ -549,7 +551,7 @@ class Message:
     def _handle_score_report(self):
         if self.request.get("hand"):
             for piece in self.request.get("hand"):
-                self.score = piece.values[0].value + piece.values[1].value
+                self.score += piece.values[0].value + piece.values[1].value
         msg = {"action": "end_game", "winner": self.request.get("winner"), "score": self.score}
         self.send_all(msg)
         return {"action": "wait", "msg": Colors.BYellow + "Waiting for Scores" + Colors.Color_Off}
