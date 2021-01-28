@@ -12,10 +12,12 @@ class Player:
         self.hand_commit = []
         self.encrypted_hand = []
         self.server_aes_cipher = None
+        self.already_have_player_keys = False
         self.aes_player_keys = {}
         self.aes_player_keys_dec = {}
         self.player_pub_keys = {}
         self.players_commits = {}
+        self.players_commits_confirmations = {}
         self.num_pieces = 0
         self.score = 0
         self.host = False
@@ -115,10 +117,10 @@ class Player:
                 res = {"action": "play_piece", "piece": piece, "edge": edge, "win": self.checkifWin()}
             # if there is no piece to play try to pick a piece, if there is no piece to pick pass
             else:
-                if len(self.pseudo_starting_stock) > 0:
-                    res = self.pickAnonPiece()
-                else:
-                    res = {"action": "pass_play", "piece": None, "edge": edge, "win": self.checkifWin()}
+                #if len(self.pseudo_starting_stock) > 0:
+                #    res = self.pickAnonPiece()
+                #else:
+                res = {"action": "pass_play", "piece": None, "edge": edge, "win": self.checkifWin()}
             print("To play -> " + str(piece))
         return res
 
@@ -150,6 +152,7 @@ class Deck:
     deck = []
     pseudo_deck = []
     pseudo_table = []
+    tile_keys_per_player = {}
 
     def __init__(self, pieces_per_player=5):
         self.deck = [Piece(x, y) for x in range(7) for y in range(x, 7)]

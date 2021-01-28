@@ -184,6 +184,7 @@ class Message:
             self.player.server_aes_cipher = AESCipher(aes_secret)
         print(self.response.get("msg"))
         print("There are " + str(self.response.get("nplayers")) + "\\" + str(self.response.get("game_players")))
+        self.player.nplayers = self.response.get("nplayers")
 
     def _handle_key_exchange(self):
         print(self.response.get("msg"))
@@ -224,8 +225,10 @@ class Message:
         for secret in self.player.aes_player_keys_dec:
             print("RESULTADO", secret, self.player.aes_player_keys_dec[secret].secret)
 
-        msg = {"action": "finished_setup"}
-        return msg
+        if len(self.player.aes_player_keys_dec) >= self.player.nplayers-1 and not self.player.already_have_player_keys:
+            msg = {"action": "finished_setup"}
+            self.player.already_have_player_keys = True
+            return msg
 
     def _handle_waiting_for_host_as_host(self):
         input(Colors.BGreen + "PRESS ENTER TO START THE GAME" + Colors.Color_Off)
@@ -336,7 +339,7 @@ class Message:
         return msg
 
     def _handle_commit_hand(self):
-        self.player.hand_commit = HandCommit(self.player.encrypted_hand)
+        self.player.hand_commit = HandCommit(self.player.encrypted_hand.copy())
 
         signed_commit = self.keychain.sign(pickle.dumps(self.player.hand_commit.publishCommit()))
 
@@ -566,7 +569,8 @@ class Message:
             signed_piece = self.response.get("signed_piece")
             last_piece_played = self.response.get("last_piece")
             last_player = self.response.get("last_player")
-            if not self.keychain.verify_sign(pickle.dumps(last_piece_played), signed_piece, readPublicKeyFromPEM(self.player.player_pub_keys[last_player])):
+            if not self.keychain.verify_sign(pickle.dumps(last_piece_played), signed_piece,
+                                             readPublicKeyFromPEM(self.player.player_pub_keys[last_player])):
                 print(Colors.Red + "This signature is not valid" + Colors.Color_Off)
                 exit(-1)
             print(Colors.Green + "Last play signature is valid!" + Colors.Color_Off)
@@ -594,9 +598,16 @@ class Message:
                     piece_signature = self.keychain.sign(pickle.dumps(msg.get("piece")))
                     msg.update({"signed_piece": piece_signature})
                 return msg
-    
+
     def _handle_report_score(self):
-        msg = {"action": "score_report", "hand" : self.player.hand, "hand_commit": self.player.hand_commit, "winner": self.response.get("winner")}
+        msg = {"action": "score_report", "hand": self.player.hand, "hand_commit": self.player.hand_commit,
+               "winner": self.response.get("winner")}
+        return msg
+
+    def _handle_reveal_everything(self):
+        msg = {"action": "validate_game", "tile_keys": self.player.randomized_tuple_mapping,
+               'hand_commit_confirmation': self.player.hand_commit.publishConfirmation(),
+               "remaining_hand": self.player.hand}
         return msg
 
     def _handle_end_game(self):
@@ -646,9 +657,10 @@ class Message:
             self._handle_receiving_aes()
         elif action == "keys_exchanged":
             response = self._handle_keys_exchanged()
-            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
-                              self.aes_cipher)
-            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+            if response is not None:
+                message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
+                                  self.aes_cipher)
+                self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "waiting_for_host":
             if self.player.host:
                 response = self._handle_waiting_for_host_as_host()
@@ -742,8 +754,13 @@ class Message:
             response = self._handle_report_score()
             if response is not None:
                 message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
-                                        self.aes_cipher)
+                                  self.aes_cipher)
                 self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "reveal_everything":
+            response = self._handle_reveal_everything()
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
+                              self.aes_cipher)
+            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "end_game":
             self._handle_end_game()
         elif action == "wait":

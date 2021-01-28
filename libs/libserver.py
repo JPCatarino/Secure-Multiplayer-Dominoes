@@ -12,6 +12,7 @@ sys.path.append(os.path.abspath(os.path.join('.')))
 sys.path.append(os.path.abspath(os.path.join('..')))
 
 import utils.Colors as Colors
+from security.handCommit import verifyHandCommit
 from security.asymCiphers import readPublicKeyFromPEM, RSAKeychain
 from security.symCiphers import AESCipher
 from itertools import combinations
@@ -208,7 +209,6 @@ class Message:
                     # send info to all players
                     self.send_all(msg)
                     msg["session_key"] = encrypted_secret
-
 
                     # check if table is full
                     if self.game.isFull():
@@ -519,9 +519,11 @@ class Message:
         if self.request.get("win"):
             if player.checkifWin():
                 print(Colors.BGreen + " WINNER " + player.name + Colors.Color_Off)
-                #msg = {"action": "end_game", "winner": player.name, "score": None}
-                print("penis", self.game.players_played_pieces)
+                self.game.players_ready = False
+                self.game_winner = player.name
+                # msg = {"action": "end_game", "winner": player.name, "score": None}
                 msg = {"action": "report_score", "winner": player.name}
+                #msg = {"action": "reveal_everything"}
         else:
             msg = {"action": "rcv_game_properties"}
             if "signed_piece" in self.request:
@@ -538,6 +540,8 @@ class Message:
         if player.nopiece:
             print("No piece END")
             msg = {"action": "end_game", "winner": Colors.BYellow + "TIE" + Colors.Color_Off}
+            self.game.players_ready = False
+            #msg = {"action": "reveal_everything"}
         # Update the variable nopiece so that the server can know if the player has passed the previous move
         else:
             print("No piece")
@@ -547,6 +551,74 @@ class Message:
 
         self.send_all(msg)
         return msg
+
+    def _handle_validate_game(self):
+        self.game.players_waiting += 1
+        self.game.players_commits_confirmations[self.player_nickname] = self.request.get("hand_commit_confirmation")
+        self.game.deck.tile_keys_per_player[self.player_nickname] = self.request.get("tile_keys")
+        self.game.player_initial_hands[self.player_nickname] = []
+
+        if self.game.players_waiting >= self.game.nplayers:
+            self.game.players_waiting = 0
+
+            # Verify all hand commitments to check if player cheated in providing information
+            for player_name in self.game.players_commits:
+
+                if not verifyHandCommit(self.game.players_commits[player_name][0],
+                                        self.game.players_commits_confirmations[player_name]):
+                    print(Colors.Red + player_name + " Sent an Invalid Hand Commit" + Colors.Color_Off)
+                else:
+                    print(Colors.Green + player_name + " Sent a valid Hand Commit" + Colors.Color_Off)
+
+            # Decrypt all tiles in hand commit
+            for player_name in self.game.players_commits_confirmations:
+                player_encrypted_tiles = self.game.players_commits_confirmations[player_name][1]
+
+                for tile in player_encrypted_tiles:
+                    tile_to_decrypt = tile
+                    while True:
+                        current_player_key = self.game.randomization_order[-1]
+                        current_key_pairs = self.game.deck.tile_keys_per_player[current_player_key]
+
+                        key_tuple_dict = {}
+
+                        key_to_use = [keys for keys in current_key_pairs.keys() if
+                                      current_key_pairs[keys][0] in tile_to_decrypt]
+
+                        for key in key_to_use:
+                            key_tuple_dict[current_key_pairs[key]] = key
+
+                        for tuple_piece in key_tuple_dict:
+                            if tile_to_decrypt == tuple_piece[0]:
+                                decipher = AESCipher(key_tuple_dict[tuple_piece])
+                                deciphered_piece = pickle.loads(decipher.decrypt_aes_gcm(tuple_piece))
+
+                        tile_to_decrypt = deciphered_piece
+                        self.game.randomization_order.rotate(1)
+
+                        if self.game.randomization_order[-1] == self.game.first_in_randomization:
+                            tile_index, tile = tile_to_decrypt
+                            translated_tiles = self.game.deck.deck[tile_index]
+                            self.game.player_initial_hands[player_name].append(translated_tiles)
+                            break
+
+            for player_name in self.game.player_initial_hands:
+                player_played_pieces = self.game.players_played_pieces[player_name]
+
+                for tile in player_played_pieces:
+                    if tile not in self.game.player_initial_hands:
+                        print(Colors.Red + player_name + " played a piece not in his hand" + Colors.Color_Off)
+                        exit(-1)
+
+                print(Colors.Green + player_name + " played only valid tiles" + Colors.Color_Off)
+
+            print("Everything Valid, proceeding to score")
+            msg = {"action": "report_score", "winner": self.game_winner}
+            self.send_all(msg)
+            return msg
+
+        else:
+            return {"action": "wait", "msg": Colors.Green + "Wait for another players" + Colors.Color_Off}
 
     def _handle_score_report(self):
         if self.request.get("hand"):
@@ -608,6 +680,9 @@ class Message:
             self._set_selector_events_mask("r")
         elif action == "send_to_player":
             content = self._handle_send_to_player()
+            self._set_selector_events_mask("r")
+        elif action == "validate_game":
+            content = self._handle_validate_game()
             self._set_selector_events_mask("r")
         elif action == "score_report":
             content = self._handle_score_report()

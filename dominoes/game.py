@@ -11,6 +11,10 @@ class Game:
         self.player_index = 0
         self.init_validation_count = 0
         self.players_commits = {}
+        self.players_commits_confirmations = {}
+        self.players_played_pieces = {}
+        self.player_initial_hands = {}
+        self.game_winner = None
         self.init_distribution = True
         self.next_action = "play"
         self.started = False
