@@ -5,17 +5,19 @@ from security import hashFunctions
 
 
 class Player:
-    def __init__(self, name, socket, pieces_per_player=None):
+    def __init__(self, name, socket, cheater, pieces_per_player=None):
         self.name = name
         self.socket = socket
         self.hand = []
         self.hand_commit = []
         self.encrypted_hand = []
         self.server_aes_cipher = None
+        self.already_have_player_keys = False
         self.aes_player_keys = {}
         self.aes_player_keys_dec = {}
         self.player_pub_keys = {}
         self.players_commits = {}
+        self.players_commits_confirmations = {}
         self.num_pieces = 0
         self.score = 0
         self.host = False
@@ -25,9 +27,13 @@ class Player:
         self.deck = []
         self.pseudo_starting_stock = []
         self.nopiece = False
+
         self.player_registered = False
         self.tuple_keychains = {}
         self.new_piece = None
+
+        self.isCheater = cheater
+
 
     def __str__(self):
         return str(self.toJson())
@@ -115,13 +121,95 @@ class Player:
                 res = {"action": "play_piece", "piece": piece, "edge": edge, "win": self.checkifWin()}
             # if there is no piece to play try to pick a piece, if there is no piece to pick pass
             else:
-                if len(self.pseudo_starting_stock) > 0:
-                    res = self.pickAnonPiece()
-                else:
-                    res = {"action": "pass_play", "piece": None, "edge": edge, "win": self.checkifWin()}
+                #if len(self.pseudo_starting_stock) > 0:
+                #    res = self.pickAnonPiece()
+                #else:
+                res = {"action": "pass_play", "piece": None, "edge": edge, "win": self.checkifWin()}
             print("To play -> " + str(piece))
         return res
 
+    def cheat_play(self):
+        res = {}
+        if self.in_table == []:
+            print("Empty table")
+            piece = self.hand.pop()
+            self.updatePieces(-1)
+            res = {"action": "play_piece", "piece": piece, "edge": 0, "win": False}
+        else:
+            edges = self.in_table[0].values[0].value, self.in_table[len(self.in_table) - 1].values[1].value
+            print(str(edges[0]) + " " + str(edges[1]))
+            max = 0
+            index = 0
+            edge = None
+            flip = False
+            # get if possible the best piece to play and the correspondent assigned edge
+            for i, piece in enumerate(self.hand):
+                aux = int(piece.values[0].value) + int(piece.values[1].value)
+                if aux > max:
+                    if int(piece.values[0].value) == int(edges[0]):
+                        max = aux
+                        index = i
+                        flip = True
+                        edge = 0
+                    elif int(piece.values[1].value) == int(edges[0]):
+                        max = aux
+                        index = i
+                        flip = False
+                        edge = 0
+                    elif int(piece.values[0].value) == int(edges[1]):
+                        max = aux
+                        index = i
+                        flip = False
+                        edge = 1
+                    elif int(piece.values[1].value) == int(edges[1]):
+                        max = aux
+                        index = i
+                        flip = True
+                        edge = 1
+            # if there is a piece to play, remove the piece from the hand and check if the orientation is the correct
+            if edge is not None:
+                piece = self.hand.pop(index)
+                if flip:
+                    piece.flip()
+                self.updatePieces(-1)
+                res = {"action": "play_piece", "piece": piece, "edge": edge, "win": self.checkifWin()}
+
+            # if there is no piece to play try to cheat. No need to pick/pass, because...who needs that?
+            else:
+                #verificar as peças da mesa e ver que números edge que estão na jogada
+                #trocar uma da mão para a tornar jogável
+                #jogar essa peça
+                edges = self.in_table[0].values[0].value, self.in_table[len(self.in_table) - 1].values[1].value
+                pieceToSwitch = self.hand.pop()
+                self.updatePieces(-1)
+                cheatedPiece = Piece(edges[0], edges[1])
+                self.insertInHand(cheatedPiece)
+
+                piece = self.hand.pop(self.hand.index(cheatedPiece))
+                if flip:
+                    piece.flip()
+                self.updatePieces(-1)
+                res = {"action": "play_piece", "piece": cheatedPiece, "edge": edge, "win": self.checkifWin()}
+            print("To play -> " + str(piece))
+        return res
+
+    def validate(self, piece):
+        valid_play = [None]*2
+        for pc in self.in_table:
+            if piece == pc:
+                valid_play[0] = False   #illegal move, piece already played in table
+            else:
+                for pc in self.hand:
+                    if piece == pc:
+                        valid_play[1] = False  # illegal move, piece in someone's hands
+                    else:
+                        valid_play[0] = True
+                        valid_play[1] = True
+
+        if valid_play[0] == valid_play[1] == True:
+            return True   #legal play
+        else:
+            return False  #ilegal play
 
 class Piece:
     values = []
@@ -131,6 +219,15 @@ class Piece:
 
     def __str__(self):
         return " {}:{}".format(str(self.values[0]), str(self.values[1]))
+
+    def __eq__(self, other):
+        if not isinstance(other, Piece):
+            # don't attempt to compare against unrelated types
+            return NotImplemented
+
+        return (self.values[0].value == other.values[0].value and self.values[1].value == other.values[1].value) or \
+               (self.values[0].value == other.values[1].value and self.values[1].value == other.values[0].value) or \
+               (self.values[1].value == other.values[0].value and self.values[0].value == other.values[1].value)
 
     def flip(self):
         self.values = [self.values[1], self.values[0]]
@@ -150,6 +247,7 @@ class Deck:
     deck = []
     pseudo_deck = []
     pseudo_table = []
+    tile_keys_per_player = {}
 
     def __init__(self, pieces_per_player=5):
         self.deck = [Piece(x, y) for x in range(7) for y in range(x, 7)]
