@@ -674,7 +674,6 @@ class Message:
 
         if self.game.players_waiting >= self.game.nplayers:
             self.game.players_waiting = 0
-            print("score", self.game.players_calculated_scores)
             score_history = {}
             score = 0
             self.game.score = 0
@@ -690,10 +689,10 @@ class Message:
                         winner = player
                     elif score_history[winner] > score_history[player]:
                         winner = player
-                self.game.score = sum(hand_score
+                self.game.score = sum([hand_score
                                       for player_name in score_history
                                       for hand_score in score_history[player_name]
-                                      if player_name != winner)
+                                      if player_name != winner])
             else:
                 self.game.score = 0
                 winner = self.game.game_winner

@@ -641,10 +641,10 @@ class Message:
                     winner = player
                 elif score_history[winner] > score_history[player]:
                     winner = player
-            score = sum(hand_score
+            score = sum([hand_score
                         for player_name in score_history
                         for hand_score in score_history[player_name]
-                        if player_name != winner)
+                        if player_name != winner])
         else:
             winner = self.response.get("winner")
             for player_name in remaining_hands:
