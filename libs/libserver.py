@@ -30,7 +30,8 @@ player_messages = {}
 
 
 class Message:
-    def __init__(self, selector, sock, addr, game, player_list, keychain, player_keys_dict, player_keys_dict_PEM, certs, score):
+    def __init__(self, selector, sock, addr, game, player_list, keychain, player_keys_dict, player_keys_dict_PEM, certs,
+                 score):
         self.selector = selector
         self.sock = sock
         self.addr = addr
@@ -184,7 +185,7 @@ class Message:
             cert = cryptography.x509.load_pem_x509_certificate(cert_PEM, default_backend())
             cc_pub_key = cert.public_key()
             print(self.request.get("signature"), self.request.get("data"))
-            if(validateSign(self.request.get("signature"), self.request.get("data"), cc_pub_key)):
+            if (validateSign(self.request.get("signature"), self.request.get("data"), cc_pub_key)):
                 print("VALID CERT AND SIGNATURE")
         else:
             print("Invalid Certificate! User will not be assigned")
@@ -454,6 +455,7 @@ class Message:
 
     def _handle_ready_to_play(self):
         self.game.players_waiting += 1
+        self.game.players_played_pieces[self.player_nickname] = []
 
         if self.game.players_waiting >= self.game.nplayers:
             self.game.players_waiting = 0
@@ -505,6 +507,17 @@ class Message:
     def _handle_play_piece(self, player):
         next_p = self.game.nextPlayer()
         if self.request.get("piece") is not None:
+            signed_piece = self.request.get("signed_piece")
+            print(Colors.Yellow + "Validating Play Signature..." + Colors.Color_Off)
+
+            if not self.keychain.verify_sign(pickle.dumps(self.request.get("piece")), signed_piece, self.player_key):
+                self.send_all({"action": "wait", "msg": Colors.BRed + "Player" + self.player_nickname +
+                                                        "sent an invalid signature!" + Colors.Color_Off})
+                exit(-1)
+
+            print(Colors.Green + "Play Signature validated!" + Colors.Color_Off)
+            self.game.players_played_pieces[self.player_nickname].append(self.request.get("piece"))
+
             player.nopiece = False
             player.updatePieces(-1)
             if self.request.get("edge") == 0:
@@ -520,10 +533,15 @@ class Message:
             if player.checkifWin():
                 self.game.players_ready = False
                 print(Colors.BGreen + " WINNER " + player.name + Colors.Color_Off)
-                self.game_winner = player.name
+                self.game.game_winner = player.name
                 msg = {"action": "reveal_everything"}
         else:
             msg = {"action": "rcv_game_properties"}
+            if "signed_piece" in self.request:
+                msg.update({"last_piece": self.request.get("piece")})
+                msg.update({"last_player": self.player_nickname})
+                msg.update({"signed_piece": self.request.get("signed_piece")})
+
         msg.update(self.game.toJson())
         self.send_all(msg)
         return msg
@@ -615,7 +633,7 @@ class Message:
 
     def _handle_score_report(self):
         self.game.players_waiting += 1
-        if self.request.get("winner") == "TIE": 
+        if self.request.get("winner") == "TIE":
             winner = None
             score = 0
             if self.request.get("hand"):
@@ -624,13 +642,13 @@ class Message:
                     score += piece.values[0].value + piece.values[1].value
                 self.game.score_history[self.request.get("nickname")] = score
                 for player in self.game.score_history:
-                    if(winner == None):
+                    if (winner == None):
                         winner = player
-                    elif(self.game.score_history[winner] > self.game.score_history[player]):
+                    elif (self.game.score_history[winner] > self.game.score_history[player]):
                         winner = player
                     if player != winner:
                         self.game.score = 0
-                        self.game.score += self.game.score_history[player]            
+                        self.game.score += self.game.score_history[player]
         else:
             if self.request.get("hand"):
                 for piece in self.request.get("hand"):
@@ -638,7 +656,7 @@ class Message:
             winner = self.request.get("winner")
 
         if self.game.players_waiting >= self.game.nplayers:
-            self.game.players_waiting = 0 
+            self.game.players_waiting = 0
             msg = {"action": "end_game", "winner": winner, "score": self.game.score}
             self.send_all(msg)
             return msg
