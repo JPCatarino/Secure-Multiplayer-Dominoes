@@ -161,7 +161,8 @@ class Message:
         return dict(content=dict(action=action))
 
     def _handle_login(self):
-        nickname = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))  # input(data["msg"])
+        #nickname = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))  # input(data["msg"])
+        nickname = "N9BH"
         signature, data = self.cc.signData(nickname)
         cert = self.cc.get_signature_cert()
         # cc_pubKey = self.cc.get_pubKey()
