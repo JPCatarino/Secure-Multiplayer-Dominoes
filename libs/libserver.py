@@ -662,30 +662,53 @@ class Message:
 
     def _handle_score_report(self):
         self.game.players_waiting += 1
-        if self.request.get("winner") == "TIE":
-            winner = None
-            score = 0
-            if self.request.get("hand"):
-                self.game.score_history[self.request.get("nickname")] = self.request.get("hand")
-                for piece in self.game.score_history[self.request.get("nickname")]:
-                    score += piece.values[0].value + piece.values[1].value
-                self.game.score_history[self.request.get("nickname")] = score
-                for player in self.game.score_history:
-                    if (winner == None):
-                        winner = player
-                    elif (self.game.score_history[winner] > self.game.score_history[player]):
-                        winner = player
-                    if player != winner:
-                        self.game.score = 0
-                        self.game.score += self.game.score_history[player]
-        else:
-            if self.request.get("hand"):
-                for piece in self.request.get("hand"):
-                    self.game.score += piece.values[0].value + piece.values[1].value
-            winner = self.request.get("winner")
+        self.game.players_calculated_scores[self.player_nickname] = self.request.get("score")
+        self.game.players_possible_winner[self.player_nickname] = self.request.get("possible_winner")
 
         if self.game.players_waiting >= self.game.nplayers:
             self.game.players_waiting = 0
+            print("score", self.game.players_calculated_scores)
+            score_history = {}
+            score = 0
+            self.game.score = 0
+
+            if self.game.game_winner == "TIE":
+                winner = None
+                for player_name in self.game.players_remaining_hands:
+                    for piece in self.game.players_remaining_hands[player_name]:
+                        score += piece.values[0].value + piece.values[1].value
+                    score_history[player_name] = score
+                for player in score_history:
+                    if winner is None:
+                        winner = player
+                    elif score_history[winner] > score_history[player]:
+                        winner = player
+                self.game.score = sum(hand_score
+                                      for player_name in score_history
+                                      for hand_score in score_history[player_name]
+                                      if player_name != winner)
+            else:
+                self.game.score = 0
+                winner = self.game.game_winner
+                for player_name in self.game.players_remaining_hands:
+                    if player_name != winner:
+                        for piece in self.game.players_remaining_hands[player_name]:
+                            self.game.score += piece.values[0].value + piece.values[1].value
+
+            print(Colors.Yellow, "Checking if players agree with winner", Colors.Color_Off)
+            for possible_winner in self.game.players_possible_winner.values():
+                if possible_winner != winner:
+                    print(Colors.Red, "There's disagreement over the winner. Closing game!", Colors.Color_Off)
+                    exit(-1)
+            print(Colors.Green, "There's agreement over the winner!", Colors.Color_Off)
+
+            print(Colors.Yellow, "Checking if players agree with score", Colors.Color_Off)
+            for expected_score in self.game.players_calculated_scores.values():
+                if expected_score != self.game.score:
+                    print(Colors.Red, "There's disagreement over the score! Closing game.", Colors.Color_Off)
+                    exit(-1)
+            print(Colors.Green, "There's agreement over the score!", Colors.Color_Off)
+
             msg = {"action": "end_game", "winner": winner, "score": self.game.score}
             self.send_all(msg)
             return msg
