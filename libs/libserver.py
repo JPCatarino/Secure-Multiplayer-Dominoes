@@ -389,7 +389,7 @@ class Message:
                 print(Colors.BGreen + "Revelation Stage End! Preparing for tile de-anonymization" + Colors.Color_Off)
                 padding = []
                 pub_key_list = []
-                dummy_key = RSAKeychain(1024)
+                dummy_key = RSAKeychain(2048)
                 # Create padding for the messages to keep size
                 for i in range(0, (self.game.nplayers * self.game.deck.pieces_per_player)):
                     padding.append(os.urandom(sys.getsizeof(dummy_key.exportPubKey())))
