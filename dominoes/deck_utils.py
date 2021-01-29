@@ -18,6 +18,8 @@ class Player:
         self.player_pub_keys = {}
         self.players_commits = {}
         self.players_commits_confirmations = {}
+        self.calculated_score = 0
+        self.expected_winner = ""
         self.collected_keys = {}
         self.num_pieces = 0
         self.score = 0

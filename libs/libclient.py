@@ -6,6 +6,7 @@ import struct
 import string
 import random
 import pickle
+from functools import reduce
 
 sys.path.append(os.path.abspath(os.path.join('.')))
 sys.path.append(os.path.abspath(os.path.join('..')))
@@ -612,8 +613,51 @@ class Message:
                 return msg
 
     def _handle_report_score(self):
-        msg = {"action": "score_report", "hand": self.player.hand, "hand_commit": self.player.hand_commit,
-               "winner": self.response.get("winner"), "nickname": self.player.name}
+        hand_commits_confirmations = self.response.get("hand_commits_confirmation")
+        print(Colors.Yellow + "Validating all hand commits" + Colors.Color_Off)
+
+        for player_name in self.player.players_commits:
+
+            if not verifyHandCommit(self.player.players_commits[player_name][0],
+                                    hand_commits_confirmations[player_name]):
+                print(Colors.Red + player_name + " Sent an Invalid Hand Commit" + Colors.Color_Off)
+            else:
+                print(Colors.Green + player_name + " Sent a valid Hand Commit" + Colors.Color_Off)
+
+        print(Colors.Yellow + "Calculating score for this game" + Colors.Color_Off)
+
+        remaining_hands = self.response.get("remaining_hands")
+        score_history = {}
+        score = 0
+
+        if self.response.get("winner") == "TIE":
+            winner = None
+            for player_name in remaining_hands:
+                for piece in remaining_hands[player_name]:
+                    score += piece.values[0].value + piece.values[1].value
+                score_history[player_name] = score
+            for player in score_history:
+                if winner is None:
+                    winner = player
+                elif score_history[winner] > score_history[player]:
+                    winner = player
+            score = sum(hand_score
+                        for player_name in score_history
+                        for hand_score in score_history[player_name]
+                        if player_name != winner)
+        else:
+            winner = self.response.get("winner")
+            for player_name in remaining_hands:
+                if player_name != winner:
+                    for piece in remaining_hands[player_name]:
+                        score += piece.values[0].value + piece.values[1].value
+
+        print(Colors.Green, "I expect the winner to be ", winner, Colors.Color_Off)
+        print(Colors.Green, "I expect the score to be ", score, Colors.Color_Off)
+        self.player.calculated_score = score
+        self.player.expected_winner = winner
+        msg = {"action": "score_report", "score": score,
+               "possible_winner": self.response.get("winner")}
         return msg
 
     def _handle_reveal_everything(self):
@@ -625,6 +669,14 @@ class Message:
     def _handle_end_game(self):
         winner = self.response.get("winner")
         score = self.response.get("score")
+        print(Colors.Yellow, "Checking server score and winner", Colors.Color_Off)
+        if winner != self.player.expected_winner:
+            print(Colors.Red, "I don't agree with winner", Colors.Color_Off)
+            exit(-1)
+        if score != self.player.calculated_score:
+            print(Colors.Red, "I don't agree with score", Colors.Color_Off)
+            exit(-1)
+        print(Colors.Green, "Agreeing with score and winner!", Colors.Color_Off)
         if self.response.get("winner") == self.player.name:
             winner = Colors.BRed + "YOU" + Colors.Color_Off
             print(Colors.BGreen + "End GAME, THE WINNER IS: " + winner)
