@@ -569,6 +569,7 @@ class Message:
         self.game.players_commits_confirmations[self.player_nickname] = self.request.get("hand_commit_confirmation")
         self.game.deck.tile_keys_per_player[self.player_nickname] = self.request.get("tile_keys")
         self.game.player_initial_hands[self.player_nickname] = []
+        self.game.players_collected_key[self.player_nickname] = self.request.get("collected_keys")
 
         if self.game.players_waiting >= self.game.nplayers:
             self.game.players_waiting = 0
@@ -618,8 +619,31 @@ class Message:
                 player_played_pieces = self.game.players_played_pieces[player_name]
                 for tile in player_played_pieces:
                     if tile not in self.game.player_initial_hands[player_name]:
-                        print(Colors.Red + player_name + " played a piece not in his hand" + Colors.Color_Off)
-                        exit(-1)
+                        print(Colors.Red + player_name + " played a piece not in his initial hand" + Colors.Color_Off)
+                        print(Colors.Yellow + " Checking if player has the keys to" + str(tile) + Colors.Color_Off)
+                        key_tuples = [key_tuple for key_tuple in
+                                      list(self.game.players_collected_key[player_name].keys()) if
+                                      type(key_tuple) == tuple]
+                        if not key_tuples:
+                            print(Colors.Red, player_name, "has no keys", Colors.Color_Off)
+                            exit(-1)
+
+                        player_has_piece = False
+                        for d_tuple in key_tuples:
+                            tuple_to_check = list(self.game.players_collected_key[player_name][d_tuple].keys())[-1]
+                            key = self.game.players_collected_key[player_name][d_tuple][tuple_to_check]
+                            decipher = AESCipher(key)
+                            anon_tile_to_check = pickle.loads(decipher.decrypt_aes_gcm(tuple_to_check))
+                            tile_to_check = self.game.deck.deck[anon_tile_to_check[0]]
+
+                            if tile_to_check == tile:
+                                player_has_piece = True
+                                break
+
+                        if not player_has_piece:
+                            print(Colors.Red, player_name, "doesn't have ", tile, "keys", Colors.Color_Off)
+                            exit(-1)
+                        print(Colors.Green, player_name, "has ", tile, "keys", Colors.Color_Off)
 
                 print(Colors.Green + player_name + " played only valid tiles" + Colors.Color_Off)
 

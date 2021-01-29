@@ -18,6 +18,7 @@ class Player:
         self.player_pub_keys = {}
         self.players_commits = {}
         self.players_commits_confirmations = {}
+        self.collected_keys = {}
         self.num_pieces = 0
         self.score = 0
         self.host = False
@@ -121,10 +122,10 @@ class Player:
                 res = {"action": "play_piece", "piece": piece, "edge": edge, "win": self.checkifWin()}
             # if there is no piece to play try to pick a piece, if there is no piece to pick pass
             else:
-                #if len(self.pseudo_starting_stock) > 0:
-                #    res = self.pickAnonPiece()
-                #else:
-                res = {"action": "pass_play", "piece": None, "edge": edge, "win": self.checkifWin()}
+                if len(self.pseudo_starting_stock) > 0:
+                    res = self.pickAnonPiece()
+                else:
+                    res = {"action": "pass_play", "piece": None, "edge": edge, "win": self.checkifWin()}
             print("To play -> " + str(piece))
         return res
 

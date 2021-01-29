@@ -164,7 +164,7 @@ class Message:
         nickname = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))  # input(data["msg"])
         signature, data = self.cc.signData(nickname)
         cert = self.cc.get_signature_cert()
-        #cc_pubKey = self.cc.get_pubKey()
+        # cc_pubKey = self.cc.get_pubKey()
         print("Your name is " + Colors.BBlue + nickname + Colors.Color_Off)
         msg = {"action": "req_login", "pubkey": self.keychain.exportPubKey(), "msg": nickname,
                "signature": signature, "cert": cert, "data": data}
@@ -227,7 +227,8 @@ class Message:
         for secret in self.player.aes_player_keys_dec:
             print("RESULTADO", secret, self.player.aes_player_keys_dec[secret].secret)
 
-        if len(self.player.aes_player_keys_dec) >= self.player.nplayers-1 and not self.player.already_have_player_keys:
+        if len(
+                self.player.aes_player_keys_dec) >= self.player.nplayers - 1 and not self.player.already_have_player_keys:
             msg = {"action": "finished_setup"}
             self.player.already_have_player_keys = True
             return msg
@@ -417,6 +418,7 @@ class Message:
                 deciphered_piece = pickle.loads(decipher.decrypt_aes_gcm(tuple_piece))
 
         self.player.new_piece = deciphered_piece
+        self.player.collected_keys[deciphered_piece] = key_tuple_dict
 
         if self.response.get("more"):
             msg = {"action": "request_piece_reveal", 'new_piece': self.player.new_piece,
@@ -577,7 +579,7 @@ class Message:
                 exit(-1)
             print(Colors.Green + "Last play signature is valid!" + Colors.Color_Off)
 
-            if(self.player.validate(last_piece_played)):
+            if (self.player.validate(last_piece_played)):
                 print("Legal Play")
             else:
                 print("Cheated!")
@@ -610,13 +612,14 @@ class Message:
                 return msg
 
     def _handle_report_score(self):
-        msg = {"action": "score_report", "hand" : self.player.hand, "hand_commit": self.player.hand_commit, "winner": self.response.get("winner"), "nickname": self.player.name}
+        msg = {"action": "score_report", "hand": self.player.hand, "hand_commit": self.player.hand_commit,
+               "winner": self.response.get("winner"), "nickname": self.player.name}
         return msg
 
     def _handle_reveal_everything(self):
         msg = {"action": "validate_game", "tile_keys": self.player.randomized_tuple_mapping,
                'hand_commit_confirmation': self.player.hand_commit.publishConfirmation(),
-               "remaining_hand": self.player.hand}
+               "remaining_hand": self.player.hand, "collected_keys": self.player.collected_keys}
         return msg
 
     def _handle_end_game(self):
@@ -629,11 +632,12 @@ class Message:
         else:
             winner = Colors.BBlue + winner + Colors.Color_Off
             print(Colors.BGreen + "End GAME, THE WINNER IS: " + winner)
-            print(("{} {} {} earned {} points {}".format(Colors.ICyan, winner, Colors.ICyan, str(score), Colors.Color_Off)))
+            print(("{} {} {} earned {} points {}".format(Colors.ICyan, winner, Colors.ICyan, str(score),
+                                                         Colors.Color_Off)))
 
         self.cc.signData(score)
         msg = msg = {"action": "assign_score", }
-        
+
     def _handle_wait(self):
         print(self.response.get("msg"))
 
