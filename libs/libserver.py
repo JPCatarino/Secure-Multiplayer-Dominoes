@@ -184,6 +184,7 @@ class Message:
             cert_PEM = self.request.get("cert")
             cert = cryptography.x509.load_pem_x509_certificate(cert_PEM, default_backend())
             cc_pub_key = cert.public_key()
+            self.game.cc_pub_keys[self.player_nickname] = cc_pub_key
             print(self.request.get("signature"), self.request.get("data"))
             if (validateSign(self.request.get("signature"), self.request.get("data"), cc_pub_key)):
                 print("VALID CERT AND SIGNATURE")
@@ -663,6 +664,25 @@ class Message:
         else:
             return {"action": "wait", "msg": Colors.Yellow + "Wait for other players" + Colors.Color_Off}
 
+    
+    def _handle_assign_score(self):
+        if self.request.get("signed_score"):
+            score_sig = self.request.get("signed_score")
+            data = self.request.get("data")
+            pub_key = self.game.cc_pub_keys[self.request.get("player")]
+
+            if(validateSign(score_sig, data, pub_key)):
+                content = str()
+                content = self.request.get("player") + " - " + str(self.game.score)
+                f = open("scoreboard.txt", "w")
+                f_names = open("pseudonyms_used.txt", "w")
+                f_names.write(self.request.get("player"))
+                f.write(content)
+                f.close()
+                f.close()
+        return {"action": "wait", "msg": Colors.Yellow + "Game Ended" + Colors.Color_Off}
+
+
     def _create_response_json_content(self):
         # ADD HERE MORE MESSSAGES
         print(self.request)
@@ -721,6 +741,9 @@ class Message:
             self._set_selector_events_mask("r")
         elif action == "score_report":
             content = self._handle_score_report()
+            self._set_selector_events_mask("r")
+        elif action == "assign_score":
+            content = self._handle_assign_score()
             self._set_selector_events_mask("r")
         else:
             content = {"result": f'Error: invalid action "{action}".'}

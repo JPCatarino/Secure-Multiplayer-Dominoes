@@ -626,13 +626,14 @@ class Message:
             winner = Colors.BRed + "YOU" + Colors.Color_Off
             print(Colors.BGreen + "End GAME, THE WINNER IS: " + winner)
             print(Colors.ICyan + "Your Score: " + str(score) + Colors.Color_Off)
+            signature, data = self.cc.signData(str(score))
+            msg = {"action": "assign_score", "signed_score": signature, "data": data, "player": self.player.name}
+            return msg
         else:
             winner = Colors.BBlue + winner + Colors.Color_Off
             print(Colors.BGreen + "End GAME, THE WINNER IS: " + winner)
             print(("{} {} {} earned {} points {}".format(Colors.ICyan, winner, Colors.ICyan, str(score), Colors.Color_Off)))
-
-        self.cc.signData(score)
-        msg = msg = {"action": "assign_score", }
+        
         
     def _handle_wait(self):
         print(self.response.get("msg"))
@@ -776,7 +777,11 @@ class Message:
                               self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "end_game":
-            self._handle_end_game()
+            response = self._handle_end_game()
+            if response is not None:
+                message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
+                                self.aes_cipher)
+                self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "wait":
             self._handle_wait()
         elif action == "disconnect":

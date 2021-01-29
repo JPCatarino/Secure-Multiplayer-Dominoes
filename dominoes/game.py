@@ -27,6 +27,7 @@ class Game:
         self.first_in_randomization = None
         self.score_history = {}
         self.score = 0
+        self.cc_pub_keys = {}
 
     def checkDeadLock(self):
         return all([player.nopiece for player in self.players])
