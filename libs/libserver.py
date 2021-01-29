@@ -178,8 +178,15 @@ class Message:
         return msg
 
     def _handle_login(self):
+
         print("User {} requests login, with nickname {}".format(self.sock.getpeername(), self.request.get("msg")))
         self.player_nickname = self.request.get("msg")
+        with open("pseudonyms_used.txt" , 'r') as f:
+            pseudonyms_used = f.read().splitlines()
+
+        if(self.player_nickname in pseudonyms_used):
+            return {"action": "login", "msg": "Welcome to the server, what will be your name?"}
+        
         if (validate_certificates(self.request.get("cert"), self.certs)):
             cert_PEM = self.request.get("cert")
             cert = cryptography.x509.load_pem_x509_certificate(cert_PEM, default_backend())
@@ -721,15 +728,15 @@ class Message:
             data = self.request.get("data")
             pub_key = self.game.cc_pub_keys[self.request.get("player")]
 
-            if (validateSign(score_sig, data, pub_key)):
-                content = str()
-                content = self.request.get("player") + " - " + str(self.game.score)
-                f = open("scoreboard.txt", "w")
-                f_names = open("pseudonyms_used.txt", "w")
-                f_names.write(self.request.get("player"))
+            if(validateSign(score_sig, data, pub_key)):
+                content = self.request.get("player") + " - " + str(self.game.score) + "\n"
+                f = open("scoreboard.txt", "a")
+                f_names = open("pseudonyms_used.txt", "a")
+                names_content = self.request.get("player") + "\n" 
                 f.write(content)
+                f_names.write(names_content)
                 f.close()
-                f.close()
+                f_names.close()
         return {"action": "wait", "msg": Colors.Yellow + "Game Ended" + Colors.Color_Off}
 
     def _create_response_json_content(self):
