@@ -689,10 +689,9 @@ class Message:
                         winner = player
                     elif score_history[winner] > score_history[player]:
                         winner = player
-                self.game.score = sum([hand_score
-                                      for player_name in score_history
-                                      for hand_score in score_history[player_name]
-                                      if player_name != winner])
+                for player_name in score_history:
+                    if player_name != winner:
+                        self.game.score += score_history[player_name]
             else:
                 self.game.score = 0
                 winner = self.game.game_winner
