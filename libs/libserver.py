@@ -578,6 +578,7 @@ class Message:
         self.game.deck.tile_keys_per_player[self.player_nickname] = self.request.get("tile_keys")
         self.game.player_initial_hands[self.player_nickname] = []
         self.game.players_collected_key[self.player_nickname] = self.request.get("collected_keys")
+        self.game.players_remaining_hands[self.player_nickname] = self.request.get("remaining_hand")
 
         if self.game.players_waiting >= self.game.nplayers:
             self.game.players_waiting = 0
@@ -625,9 +626,10 @@ class Message:
 
             for player_name in self.game.player_initial_hands:
                 player_played_pieces = self.game.players_played_pieces[player_name]
-                for tile in player_played_pieces:
+                player_pieces_owned = player_played_pieces + self.game.players_remaining_hands[player_name]
+                for tile in player_pieces_owned:
                     if tile not in self.game.player_initial_hands[player_name]:
-                        print(Colors.Red + player_name + " played a piece not in his initial hand" + Colors.Color_Off)
+                        print(Colors.Red + player_name + " owns a piece not in his initial hand" + Colors.Color_Off)
                         print(Colors.Yellow + " Checking if player has the keys to" + str(tile) + Colors.Color_Off)
                         key_tuples = [key_tuple for key_tuple in
                                       list(self.game.players_collected_key[player_name].keys()) if
@@ -655,8 +657,10 @@ class Message:
 
                 print(Colors.Green + player_name + " played only valid tiles" + Colors.Color_Off)
 
-            print("Everything Valid, proceeding to score")
-            msg = {"action": "report_score", "winner": self.game.game_winner}
+            print(Colors.Green + "Everything Valid, proceeding to score" + Colors.Color_Off)
+            msg = {"action": "report_score", "winner": self.game.game_winner,
+                   "remaining_hands": self.game.players_remaining_hands,
+                   "hand_commits_confirmation": self.game.players_commits_confirmations}
             self.send_all(msg)
             return msg
 
@@ -695,7 +699,6 @@ class Message:
         else:
             return {"action": "wait", "msg": Colors.Yellow + "Wait for other players" + Colors.Color_Off}
 
-    
     def _handle_assign_score(self):
         if self.request.get("signed_score"):
             score_sig = self.request.get("signed_score")
@@ -712,7 +715,6 @@ class Message:
                 f.close()
                 f_names.close()
         return {"action": "wait", "msg": Colors.Yellow + "Game Ended" + Colors.Color_Off}
-
 
     def _create_response_json_content(self):
         # ADD HERE MORE MESSSAGES
@@ -777,7 +779,7 @@ class Message:
             content = self._handle_assign_score()
             self._set_selector_events_mask("r")
         else:
-            content = {"result": f'Error: invalid action "{action}".'}
+            content = {"action": "wait", "msg": f'Error: invalid action "{action}".'}
         if self.game.isFull() & self.game.players_ready:
             c_player = self.game.currentPlayer()
             if self.sock == c_player.socket:
