@@ -18,6 +18,8 @@ class Game:
         self.all_ready_to_play = False
         self.players_waiting = 0
         self.first_in_randomization = None
+        self.score_history = {}
+        self.score = 0
 
     def checkDeadLock(self):
         return all([player.nopiece for player in self.players])

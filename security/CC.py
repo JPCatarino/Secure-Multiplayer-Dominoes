@@ -10,6 +10,7 @@ from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.serialization import load_der_public_key
 from cryptography.hazmat.primitives import hashes
 from cryptography.x509 import load_der_x509_certificate
+from cryptography.hazmat.primitives.serialization import PublicFormat
 
 import os
 import sys
@@ -27,7 +28,6 @@ class CitizenCard:
 
         #Uncomment for Windows use
         lib = 'C:/Windows/System32/pteidpkcs11.dll'
-        
         
         self.pkcs11 = PyKCS11.PyKCS11Lib()
         self.pkcs11.load(lib)
@@ -65,9 +65,10 @@ class CitizenCard:
                 try:
                     pubKey.verify(signature, data, PKCS1v15(), hashes.SHA1())
                     print("Verification Succeeded")
+                    return True
                 except:
                     print("Verification failed")
-
+                    return False
 
     def get_signature_cert(self):
 
@@ -76,7 +77,7 @@ class CitizenCard:
                 session = self.pkcs11.openSession(slot)
 
                 certificate = session.findObjects([(CKA_CLASS, CKO_CERTIFICATE),
-                                                (CKA_LABEL, 'CITIZEN SIGNATURE CERTIFICATE')])
+                                                (CKA_LABEL, 'CITIZEN AUTHENTICATION CERTIFICATE')])
 
                 der = bytes([c.to_dict()['CKA_VALUE'] for c in certificate][0])
 

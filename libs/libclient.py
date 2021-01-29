@@ -161,11 +161,12 @@ class Message:
 
     def _handle_login(self):
         nickname = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))  # input(data["msg"])
-        signed_nick = self.cc.signData(nickname)
+        signature, data = self.cc.signData(nickname)
         cert = self.cc.get_signature_cert()
+        #cc_pubKey = self.cc.get_pubKey()
         print("Your name is " + Colors.BBlue + nickname + Colors.Color_Off)
         msg = {"action": "req_login", "pubkey": self.keychain.exportPubKey(), "msg": nickname,
-               "signed_nick": signed_nick, "cert": cert}
+               "signature": signature, "cert": cert, "data": data}
         self.player = Player(nickname, self.sock)
         return msg
 
@@ -596,7 +597,7 @@ class Message:
                 return msg
     
     def _handle_report_score(self):
-        msg = {"action": "score_report", "hand" : self.player.hand, "hand_commit": self.player.hand_commit, "winner": self.response.get("winner")}
+        msg = {"action": "score_report", "hand" : self.player.hand, "hand_commit": self.player.hand_commit, "winner": self.response.get("winner"), "nickname": self.player.name}
         return msg
 
     def _handle_end_game(self):
@@ -604,11 +605,16 @@ class Message:
         score = self.response.get("score")
         if self.response.get("winner") == self.player.name:
             winner = Colors.BRed + "YOU" + Colors.Color_Off
+            print(Colors.BGreen + "End GAME, THE WINNER IS: " + winner)
+            print(Colors.ICyan + "Your Score: " + str(score) + Colors.Color_Off)
         else:
             winner = Colors.BBlue + winner + Colors.Color_Off
-        print(Colors.BGreen + "End GAME, THE WINNER IS: " + winner)
-        print(Colors.ICyan + "Score: " + str(score) + Colors.Color_Off)
+            print(Colors.BGreen + "End GAME, THE WINNER IS: " + winner)
+            print(("{} {} {} earned {} points {}".format(Colors.ICyan, winner, Colors.ICyan, str(score), Colors.Color_Off)))
 
+        self.cc.signData(score)
+        msg = msg = {"action": "assign_score", }
+        
     def _handle_wait(self):
         print(self.response.get("msg"))
 

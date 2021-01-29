@@ -2,6 +2,8 @@ from PyKCS11 import *
 from PyKCS11.LowLevel import *
 from datetime import date
 from asn1crypto import pem
+from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
+from cryptography.hazmat.primitives import hashes
 
 from cryptography.x509 import load_der_x509_certificate
 
@@ -91,6 +93,16 @@ def validate_certificates(cf_bytes, ccerts_bytes):
         return False
 
 
+def validateSign(signature, data, pub_key):
+    try:
+        pub_key.verify(signature, data, PKCS1v15(), hashes.SHA1())
+        print("Verification Succeeded")
+        return True
+        
+    except ValueError as ve:
+        print(ve)
+        print("Verification failed")
+        return False
 
 def load_from_url(url):
     response = requests.get(url)

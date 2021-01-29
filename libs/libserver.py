@@ -12,11 +12,16 @@ sys.path.append(os.path.abspath(os.path.join('.')))
 sys.path.append(os.path.abspath(os.path.join('..')))
 
 import utils.Colors as Colors
+import cryptography
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.serialization import PublicFormat
+from cryptography.hazmat.primitives.serialization import Encoding
 from security.asymCiphers import readPublicKeyFromPEM, RSAKeychain
 from security.symCiphers import AESCipher
 from itertools import combinations
-from security.CC_utils import validate_certificates
+from security.CC_utils import validate_certificates, validateSign
 from collections import deque
+from security.CC import CitizenCard
 
 # Main socket code from https://realpython.com/python-sockets/
 
@@ -24,8 +29,7 @@ player_messages = {}
 
 
 class Message:
-    def __init__(self, selector, sock, addr, game, player_list, keychain, player_keys_dict, player_keys_dict_PEM,
-                 signed_nicks, certs, score):
+    def __init__(self, selector, sock, addr, game, player_list, keychain, player_keys_dict, player_keys_dict_PEM, certs, score):
         self.selector = selector
         self.sock = sock
         self.addr = addr
@@ -34,9 +38,9 @@ class Message:
         self.player_list = player_list
         self.player_keys_dict = player_keys_dict
         self.player_keys_dict_PEM = player_keys_dict_PEM
-        self.signed_nicknames = signed_nicks
         self.certs = certs
         self.player_aes = AESCipher()
+        self.cc = CitizenCard()
         self.player_nickname = ""
         self.player_key = None
         self._recv_buffer = b""
@@ -175,7 +179,12 @@ class Message:
         print("User {} requests login, with nickname {}".format(self.sock.getpeername(), self.request.get("msg")))
         self.player_nickname = self.request.get("msg")
         if (validate_certificates(self.request.get("cert"), self.certs)):
-            self.signed_nicknames[self.player_nickname] = self.request.get("signed_nick")
+            cert_PEM = self.request.get("cert")
+            cert = cryptography.x509.load_pem_x509_certificate(cert_PEM, default_backend())
+            cc_pub_key = cert.public_key()
+            print(self.request.get("signature"), self.request.get("data"))
+            if(validateSign(self.request.get("signature"), self.request.get("data"), cc_pub_key)):
+                print("VALID CERT AND SIGNATURE")
         else:
             print("Invalid Certificate! User will not be assigned")
         self.player_keys_dict_PEM[self.request.get("msg")] = self.request.get("pubkey")
@@ -445,7 +454,6 @@ class Message:
 
     def _handle_ready_to_play(self):
         self.game.players_waiting += 1
-        self.game.players_played_pieces[self.player_nickname] = []
 
         if self.game.players_waiting >= self.game.nplayers:
             self.game.players_waiting = 0
@@ -497,14 +505,6 @@ class Message:
     def _handle_play_piece(self, player):
         next_p = self.game.nextPlayer()
         if self.request.get("piece") is not None:
-            signed_piece = self.request.get("signed_piece")
-            print(Colors.Yellow + "Validating Play Signature..." + Colors.Color_Off)
-            if not self.keychain.verify_sign(pickle.dumps(self.request.get("piece")), signed_piece, self.player_key):
-                self.send_all({"action": "wait", "msg": Colors.BRed + "Player" + self.player_nickname +
-                                                        "sent an invalid signature!" + Colors.Color_Off})
-                exit(-1)
-            print(Colors.Green + "Play Signature validated!" + Colors.Color_Off)
-            self.game.players_played_pieces[self.player_nickname].append(self.request.get("piece"))
             player.nopiece = False
             player.updatePieces(-1)
             if self.request.get("edge") == 0:
@@ -518,16 +518,12 @@ class Message:
 
         if self.request.get("win"):
             if player.checkifWin():
+                self.game.players_ready = False
                 print(Colors.BGreen + " WINNER " + player.name + Colors.Color_Off)
                 #msg = {"action": "end_game", "winner": player.name, "score": None}
-                print("penis", self.game.players_played_pieces)
                 msg = {"action": "report_score", "winner": player.name}
         else:
             msg = {"action": "rcv_game_properties"}
-            if "signed_piece" in self.request:
-                msg.update({"last_piece": self.request.get("piece")})
-                msg.update({"last_player": self.player_nickname})
-                msg.update({"signed_piece": self.request.get("signed_piece")})
         msg.update(self.game.toJson())
         self.send_all(msg)
         return msg
@@ -536,8 +532,10 @@ class Message:
         self.game.nextPlayer()
         # If the player passed the previous move
         if player.nopiece:
+            self.game.players_ready = False
             print("No piece END")
-            msg = {"action": "end_game", "winner": Colors.BYellow + "TIE" + Colors.Color_Off}
+            #msg = {"action": "end_game", "winner": Colors.BYellow + "TIE" + Colors.Color_Off}
+            msg = {"action": "report_score", "winner": "TIE"}
         # Update the variable nopiece so that the server can know if the player has passed the previous move
         else:
             print("No piece")
@@ -549,12 +547,36 @@ class Message:
         return msg
 
     def _handle_score_report(self):
-        if self.request.get("hand"):
-            for piece in self.request.get("hand"):
-                self.score += piece.values[0].value + piece.values[1].value
-        msg = {"action": "end_game", "winner": self.request.get("winner"), "score": self.score}
-        self.send_all(msg)
-        return {"action": "wait", "msg": Colors.BYellow + "Waiting for Scores" + Colors.Color_Off}
+        self.game.players_waiting += 1
+        if self.request.get("winner") == "TIE": 
+            winner = None
+            score = 0
+            if self.request.get("hand"):
+                self.game.score_history[self.request.get("nickname")] = self.request.get("hand")
+                for piece in self.game.score_history[self.request.get("nickname")]:
+                    score += piece.values[0].value + piece.values[1].value
+                self.game.score_history[self.request.get("nickname")] = score
+                for player in self.game.score_history:
+                    if(winner == None):
+                        winner = player
+                    elif(self.game.score_history[winner] > self.game.score_history[player]):
+                        winner = player
+                    if player != winner:
+                        self.game.score = 0
+                        self.game.score += self.game.score_history[player]            
+        else:
+            if self.request.get("hand"):
+                for piece in self.request.get("hand"):
+                    self.game.score += piece.values[0].value + piece.values[1].value
+            winner = self.request.get("winner")
+
+        if self.game.players_waiting >= self.game.nplayers:
+            self.game.players_waiting = 0 
+            msg = {"action": "end_game", "winner": winner, "score": self.game.score}
+            self.send_all(msg)
+            return msg
+        else:
+            return {"action": "wait", "msg": Colors.Yellow + "Wait for other players" + Colors.Color_Off}
 
     def _create_response_json_content(self):
         # ADD HERE MORE MESSSAGES
