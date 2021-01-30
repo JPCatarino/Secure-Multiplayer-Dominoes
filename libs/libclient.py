@@ -673,7 +673,8 @@ class Message:
         return msg
 
     def _handle_reveal_everything(self):
-        msg = {"action": "validate_game", "tile_keys": self.player.randomized_tuple_mapping,
+        next_action = self.response.get("next_act")
+        msg = {"action": next_action, "tile_keys": self.player.randomized_tuple_mapping,
                'hand_commit_confirmation': self.player.hand_commit.publishConfirmation(),
                "remaining_hand": self.player.hand, "collected_keys": self.player.collected_keys}
         return msg

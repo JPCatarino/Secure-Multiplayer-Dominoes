@@ -2,6 +2,7 @@ import random
 
 from security import generateKey as keygen
 from security import hashFunctions
+from utils import Colors
 
 
 class Player:
@@ -187,6 +188,7 @@ class Player:
                 self.updatePieces(-1)
                 cheatedPiece = Piece(edges[0], edges[1])
                 self.insertInHand(cheatedPiece)
+                print(Colors.Red + "Forging a Piece, MUAHAHAHA" + Colors.Color_Off)
 
                 piece = self.hand.pop(self.hand.index(cheatedPiece))
                 if flip:
@@ -202,6 +204,7 @@ class Player:
             for piece_in_table in last_table:
                 if piece == piece_in_table:
                     valid_play[0] = False   #illegal move, piece already played in table
+                    break
                 else:
                     valid_play[0] = True
         else: 
@@ -209,6 +212,7 @@ class Player:
         for piece_in_hand in self.hand:
             if piece == piece_in_hand:
                 valid_play[1] = False  # illegal move, piece in someone's hands
+                break
             else:
                 valid_play[1] = True
 
