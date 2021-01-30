@@ -710,7 +710,7 @@ class Message:
     def _handle_disconnect(self):
         self.close()
         input("PRESS ANY KEY TO EXIT ")
-        print(self.request.get("msg"))
+        print(self.response.get("msg"))
         sys.exit(0)
 
     def _process_response_json_content(self):

@@ -1,4 +1,5 @@
 import random
+import re
 
 from security import generateKey as keygen
 from security import hashFunctions
@@ -211,7 +212,8 @@ class Player:
                         elif inp == "y":
                             print(Colors.Green + "Going to cheat" + Colors.Color_Off)
                             raw_new_piece = input(Colors.Green + "Forge a piece! (x:x)\n" + Colors.Color_Off)
-                            if len(raw_new_piece) != 3 or ':' not in raw_new_piece:
+                            regex_check = re.search("[0-9]:[0-9]", raw_new_piece)
+                            if (len(raw_new_piece) != 3 or ':' not in raw_new_piece) or not regex_check:
                                 print(Colors.Red + "Input not valid, repeat!" + Colors.Color_Off)
                             else:
                                 piece_list = raw_new_piece.split(':')
