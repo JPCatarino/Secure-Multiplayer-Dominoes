@@ -166,7 +166,7 @@ class Message:
         signature, data = self.cc.signData(nickname)
         cert = self.cc.get_signature_cert()
         # cc_pubKey = self.cc.get_pubKey()
-        print("Your name is " + Colors.BBlue + nickname + Colors.Color_Off)
+        print(Colors.BYellow + "Your name is " + Colors.BBlue + nickname + Colors.Color_Off)
         msg = {"action": "req_login", "pubkey": self.keychain.exportPubKey(), "msg": nickname,
                "signature": signature, "cert": cert, "data": data}
         self.player = Player(nickname, self.sock, self.cheater)
@@ -178,6 +178,7 @@ class Message:
         print("Session", aes_secret)
         self.player.server_aes_cipher = AESCipher(aes_secret)
         self.player.host = True
+        print(Colors.Blue + "Player " + self.player.name + "is hosting the game!" + Colors.Color_Off)
 
     def _handle_new_player(self):
         if "session_key" in self.response:
