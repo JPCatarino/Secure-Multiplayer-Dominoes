@@ -513,7 +513,7 @@ class Message:
         return msg
 
     def _handle_play_piece(self, player):
-        next_p = self.game.nextPlayer()
+        self.game.GameEnded = self.request.get("win")
         if self.request.get("piece") is not None:
             signed_piece = self.request.get("signed_piece")
             print(Colors.Yellow + "Validating Play Signature..." + Colors.Color_Off)
@@ -526,6 +526,8 @@ class Message:
             print(Colors.Green + "Play Signature validated!" + Colors.Color_Off)
             self.game.players_played_pieces[self.player_nickname].append(self.request.get("piece"))
 
+            last_table = self.game.deck.in_table.copy()
+
             player.nopiece = False
             player.updatePieces(-1)
             if self.request.get("edge") == 0:
@@ -537,19 +539,45 @@ class Message:
         print("player " + player.name + " played " + str(self.request.get("piece")))
         print("in table -> " + ' '.join(map(str, self.game.deck.in_table)) + "\n")
 
-        if self.request.get("win"):
-            if player.checkifWin():
-                self.game.players_ready = False
-                print(Colors.BGreen + " WINNER " + player.name + Colors.Color_Off)
-                self.game.game_winner = player.name
-                msg = {"action": "reveal_everything"}
+            
+        if "signed_piece" in self.request:
+            msg = {"action": "validate_this_play"}
+            msg.update({"last_piece": self.request.get("piece")})
+            msg.update({"last_player": self.player_nickname})
+            msg.update({"signed_piece": self.request.get("signed_piece")})
+            msg.update({"last_table": last_table})
         else:
             msg = {"action": "rcv_game_properties"}
-            if "signed_piece" in self.request:
-                msg.update({"last_piece": self.request.get("piece")})
-                msg.update({"last_player": self.player_nickname})
-                msg.update({"signed_piece": self.request.get("signed_piece")})
 
+        msg.update(self.game.toJson())
+        self.send_all(msg)
+        return msg
+
+    def _handle_play_piece_epilogue(self, player):
+        self.game.players_waiting += 1
+        self.game.player_cheated = False
+
+        if self.request.get("player_cheated"):
+            self.game.player_cheated = True 
+        
+        if self.game.players_waiting >= self.game.nplayers:
+            self.game.players_waiting = 0
+            if self.game.player_cheated:
+                pass 
+            else:
+                if self.game.GameEnded:
+                    if player.checkifWin():
+                        self.game.players_ready = False
+                        print(Colors.BGreen + " WINNER " + player.name + Colors.Color_Off)
+                        self.game.game_winner = player.name
+                        msg = {"action": "reveal_everything"}
+                else:
+                    self.game.nextPlayer()
+                    msg = {"action": "rcv_game_properties"}
+        else:
+            return {"action": "wait", "msg": Colors.Yellow + "Wait for other players" + Colors.Color_Off}
+
+        
         msg.update(self.game.toJson())
         self.send_all(msg)
         return msg
@@ -803,6 +831,9 @@ class Message:
 
             if action == "revealed_key_for_piece":
                 content = self._handle_revealed_key_for_piece()
+                self._set_selector_events_mask("r")
+            elif action == "play_piece_ep":
+                content = self._handle_play_piece_epilogue(self.game.currentPlayer())
                 self._set_selector_events_mask("r")
 
         response = {

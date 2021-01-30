@@ -194,18 +194,21 @@ class Player:
             print("To play -> " + str(piece))
         return res
 
-    def validate(self, piece):
+    def validate(self, piece, last_table):
         valid_play = [None]*2
-        for pc in self.in_table:
-            if piece == pc:
-                valid_play[0] = False   #illegal move, piece already played in table
+        if last_table:
+            for piece_in_table in last_table:
+                if piece == piece_in_table:
+                    valid_play[0] = False   #illegal move, piece already played in table
+                else:
+                    valid_play[0] = True
+        else: 
+            valid_play[0] = True
+        for piece_in_hand in self.hand:
+            if piece == piece_in_hand:
+                valid_play[1] = False  # illegal move, piece in someone's hands
             else:
-                for pc in self.hand:
-                    if piece == pc:
-                        valid_play[1] = False  # illegal move, piece in someone's hands
-                    else:
-                        valid_play[0] = True
-                        valid_play[1] = True
+                valid_play[1] = True
 
         if valid_play[0] == valid_play[1] == True:
             return True   #legal play
