@@ -218,8 +218,9 @@ class Message:
                 else:
                     self.game.addPlayer(self.request.get("msg"), self.sock,
                                         self.game.deck.pieces_per_player)  # Adding player
-                    msg = {"action": "new_player", "msg": Colors.BYellow + "New Player " + Colors.BGreen + self.request.get("msg")
-                                                           + Colors.BYellow + " registered in game" + Colors.Color_Off,
+                    msg = {"action": "new_player",
+                           "msg": Colors.BYellow + "New Player " + Colors.BGreen + self.request.get("msg")
+                                  + Colors.BYellow + " registered in game" + Colors.Color_Off,
                            "nplayers": self.game.nplayers, "game_players": self.game.max_players}
                     print("User " + Colors.BBlue + "{}".format(
                         self.request.get("msg")) + Colors.Color_Off + " joined the game")
@@ -251,7 +252,8 @@ class Message:
                             sub_player_PEM = {}
 
                         msg = {"action": "send_pub_keys",
-                               "msg": Colors.BYellow + "Establishing players secure session..." + Colors.Color_Off, "pub_keys": self.player_keys_dict_PEM}
+                               "msg": Colors.BYellow + "Establishing players secure session..." + Colors.Color_Off,
+                               "pub_keys": self.player_keys_dict_PEM}
                         self.send_all(msg)
                     return msg
             else:
@@ -460,6 +462,8 @@ class Message:
     def _handle_send_to_player(self):
         msg_to_send = {'action': 'secret_message', 'sender': self.request.get('sender'),
                        'msg': self.request.get('to_send')}
+        print(Colors.Yellow, "Redirecting message from", self.request.get('sender'), "to", self.request.get("rec"),
+              Colors.Color_Off)
         self.send_to_player(self.request.get('rec'), msg_to_send)
         return {"action": 'wait', 'msg': Colors.BGreen + "Message sent" + Colors.Color_Off}
 
@@ -526,6 +530,15 @@ class Message:
                 exit(-1)
 
             print(Colors.Green + "Play Signature validated!" + Colors.Color_Off)
+
+            print(Colors.Yellow + "Checking if player has played this piece before" + Colors.Color_Off)
+            if self.request.get("piece") in self.game.players_played_pieces[self.player_nickname]:
+                print(Colors.Red + self.player_nickname + " is playing duplicate pieces! He is a cheater!"
+                      + Colors.Color_Off)
+                msg = {"action": "disconnect"}
+                self.send_all(msg)
+                return msg
+
             self.game.players_played_pieces[self.player_nickname].append(self.request.get("piece"))
 
             print(Colors.Yellow + "Checking if piece has been translated once" + Colors.Color_Off)
