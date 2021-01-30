@@ -218,8 +218,8 @@ class Message:
                 else:
                     self.game.addPlayer(self.request.get("msg"), self.sock,
                                         self.game.deck.pieces_per_player)  # Adding player
-                    msg = {"action": "new_player", "msg": "New Player " + Colors.BGreen + self.request.get("msg")
-                                                          + Colors.Color_Off + " registered in game",
+                    msg = {"action": "new_player", "msg": Colors.BYellow + "New Player " + Colors.BGreen + self.request.get("msg")
+                                                           + Colors.BYellow + " registered in game" + Colors.Color_Off,
                            "nplayers": self.game.nplayers, "game_players": self.game.max_players}
                     print("User " + Colors.BBlue + "{}".format(
                         self.request.get("msg")) + Colors.Color_Off + " joined the game")
@@ -246,12 +246,12 @@ class Message:
                             for new_keys in pair_dict[key]:
                                 sub_player_PEM[new_keys] = self.player_keys_dict_PEM[new_keys]
                             msg = {"action": "key_exchange", "session_keys": sub_player_PEM,
-                                   "msg": "Establishing players secure session"}
+                                   "msg": Colors.BYellow + "Establishing players secure session...exchanging keys..." + Colors.Color_Off}
                             self.send_to_player(key, msg)
                             sub_player_PEM = {}
 
                         msg = {"action": "send_pub_keys",
-                               "msg": "Establishing players secure session", "pub_keys": self.player_keys_dict_PEM}
+                               "msg": Colors.BYellow + "Establishing players secure session..." + Colors.Color_Off, "pub_keys": self.player_keys_dict_PEM}
                         self.send_all(msg)
                     return msg
             else:
@@ -270,7 +270,7 @@ class Message:
                     msg = {"action": "receiving_aes", "aes_key": temp, "player_receive": player_send}
                     self.send_all(msg)
         msg = {"action": "keys_exchanged",
-               "msg": Colors.BYellow + "Keys have been exchanged" + Colors.Color_Off}
+               "msg": Colors.BYellow + "Keys have been exchanged!" + Colors.Color_Off}
         self.send_all(msg)
         return msg
 
