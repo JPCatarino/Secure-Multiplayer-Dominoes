@@ -34,6 +34,7 @@ class Game:
         self.cc_pub_keys = {}
         self.GameEnded = False
         self.player_cheated = False
+        self.pieces_translated = []
 
     def checkDeadLock(self):
         return all([player.nopiece for player in self.players])
