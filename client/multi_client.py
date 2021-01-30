@@ -62,7 +62,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--ip', type=str, help='Server IP', required=False, default= '127.0.0.1')
     parser.add_argument('-p', '--port', type=int, help='Server Port', required=False, default= '5000')
-    parser.add_argument('-c', '--cheater', type=bool, help='Client Cheater', required=False, default=False)
+    parser.add_argument('-c', '--cheater', type=bool, help='True If Client is a Cheater', required=False, default=False)
     args = parser.parse_args()
 
 

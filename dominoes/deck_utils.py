@@ -37,6 +37,7 @@ class Player:
         self.new_piece = None
 
         self.isCheater = cheater
+        self.manual_cheating = True
 
     def __str__(self):
         return str(self.toJson())
@@ -179,13 +180,53 @@ class Player:
 
             # if there is no piece to play try to cheat. No need to pick/pass, because...who needs that?
             else:
+                if self.manual_cheating:
+                    while True:
+                        inp = input(Colors.BCyan + "Manual Cheating is enabled, want to switch to auto? (y/n)\n" + Colors.Color_Off)
+                        print(inp)
+                        if inp != "y" and inp != "n":
+                            print(Colors.Red + "Input not valid, repeat!" + Colors.Color_Off)
+                        elif inp == "y":
+                            print(Colors.Green + "Auto-cheating Enabled" + Colors.Color_Off)
+                            self.manual_cheating = False
+                            break
+                        else:
+                            print(Colors.Green + "Staying on manual mode" + Colors.Color_Off)
+                            break
+
                 # verificar as peças da mesa e ver que números edge que estão na jogada
                 # trocar uma da mão para a tornar jogável
                 # jogar essa peça
                 edges = self.in_table[0].values[0].value, self.in_table[len(self.in_table) - 1].values[1].value
                 pieceToSwitch = self.hand.pop()
                 self.updatePieces(-1)
-                cheatedPiece = Piece(edges[0], edges[1])
+                if not self.manual_cheating:
+                    cheatedPiece = Piece(edges[0], edges[1])
+                else:
+                    while True:
+                        inp = input('Do you want to cheat? (y/n)\n')
+                        print(inp)
+                        if inp != "y" and inp != "n":
+                            print(Colors.Red + "Input not valid, repeat!" + Colors.Color_Off)
+                        elif inp == "y":
+                            print(Colors.Green + "Going to cheat" + Colors.Color_Off)
+                            raw_new_piece = input(Colors.Green + "Forge a piece! (x:x)\n" + Colors.Color_Off)
+                            if len(raw_new_piece) != 3 or ':' not in raw_new_piece:
+                                print(Colors.Red + "Input not valid, repeat!" + Colors.Color_Off)
+                            else:
+                                piece_list = raw_new_piece.split(':')
+                                cheatedPiece = Piece(int(piece_list[0]), int(piece_list[1]))
+                                break
+                        else:
+                            print(Colors.Green + "Going to play legally like a good boy" + Colors.Color_Off)
+                            self.insertInHand(pieceToSwitch)
+                            if len(self.pseudo_starting_stock) > 0:
+                                res = self.pickAnonPiece()
+                            else:
+                                res = {"action": "pass_play", "piece": None, "edge": edge, "win": self.checkifWin()}
+                            print("To play -> " + str(piece))
+                            return res
+
                 self.insertInHand(cheatedPiece)
                 print(Colors.Red + "Forging a Piece, MUAHAHAHA" + Colors.Color_Off)
 
