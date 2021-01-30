@@ -535,7 +535,8 @@ class Message:
             if self.request.get("piece") in self.game.players_played_pieces[self.player_nickname]:
                 print(Colors.Red + self.player_nickname + " is playing duplicate pieces! He is a cheater!"
                       + Colors.Color_Off)
-                msg = {"action": "disconnect"}
+                msg = {"action": "disconnect", "msg": Colors.Red + self.player_nickname + " is playing duplicate pieces! He is a cheater!"
+                      + Colors.Color_Off}
                 self.send_all(msg)
                 return msg
 
@@ -642,7 +643,7 @@ class Message:
                                         self.game.players_commits_confirmations[player_name]):
                     print(Colors.Red + player_name + " Sent an Invalid Hand Commit" + Colors.Color_Off)
                     print(Colors.Red + player_name + " is a cheater!" + Colors.Color_Off)
-                    msg = {"action": "disconnect"}
+                    msg = {"action": "disconnect", "msg": Colors.Red + player_name + " is a cheater!" + Colors.Color_Off}
                     self.send_all(msg)
                     return msg
                 else:
@@ -693,7 +694,7 @@ class Message:
                         if not key_tuples:
                             print(Colors.Red, player_name, "has no keys", Colors.Color_Off)
                             print(Colors.Red + player_name + " is a cheater!" + Colors.Color_Off)
-                            msg = {"action": "disconnect"}
+                            msg = {"action": "disconnect", "msg": Colors.Red + player_name + " is a cheater!" + Colors.Color_Off}
                             self.send_all(msg)
                             return msg
 
@@ -748,7 +749,7 @@ class Message:
                                     self.game.players_commits_confirmations[cheater_name]):
                 print(Colors.Red + cheater_name + " Sent an Invalid Hand Commit" + Colors.Color_Off)
                 print(Colors.Red + cheater_name + " is a cheater!" + Colors.Color_Off)
-                msg = {"action": "disconnect"}
+                msg = {"action": "disconnect", "msg": Colors.Red + cheater_name + " is a cheater! GAME ENDED" + Colors.Color_Off}
                 self.send_all(msg)
                 return msg
             else:
@@ -797,7 +798,7 @@ class Message:
                     if not key_tuples:
                         print(Colors.Red, cheater_name, "has no keys", Colors.Color_Off)
                         print(Colors.Red + cheater_name + " is a cheater!" + Colors.Color_Off)
-                        msg = {"action": "disconnect"}
+                        msg = {"action": "disconnect", "msg": Colors.Red + cheater_name + " is a cheater! GAME ENDED" + Colors.Color_Off}
                         self.send_all(msg)
                         return msg
 
@@ -816,7 +817,7 @@ class Message:
                     if not player_has_piece:
                         print(Colors.Red, cheater_name, "doesn't have ", tile, "keys", Colors.Color_Off)
                         print(Colors.Red + cheater_name + " is a cheater!" + Colors.Color_Off)
-                        msg = {"action": "disconnect"}
+                        msg = {"action": "disconnect", "msg": Colors.Red + cheater_name + " is a cheater! GAME ENDED" + Colors.Color_Off}
                         self.send_all(msg)
                         return msg
                     print(Colors.Green, cheater_name, "has ", tile, "keys", Colors.Color_Off)
@@ -825,7 +826,7 @@ class Message:
 
             print(Colors.Green + "Player" + cheater_name + "didn't cheat!" + Colors.Color_Off)
 
-            msg = {"action": "disconnect"}
+            msg = {"action": "disconnect", "msg": Colors.Red + " Cheating protest ocurred! GAME ENDED" + Colors.Color_Off}
             self.send_all(msg)
             return msg
         else:
