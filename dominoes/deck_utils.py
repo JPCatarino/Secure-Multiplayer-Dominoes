@@ -38,7 +38,6 @@ class Player:
 
         self.isCheater = cheater
 
-
     def __str__(self):
         return str(self.toJson())
 
@@ -180,9 +179,9 @@ class Player:
 
             # if there is no piece to play try to cheat. No need to pick/pass, because...who needs that?
             else:
-                #verificar as peças da mesa e ver que números edge que estão na jogada
-                #trocar uma da mão para a tornar jogável
-                #jogar essa peça
+                # verificar as peças da mesa e ver que números edge que estão na jogada
+                # trocar uma da mão para a tornar jogável
+                # jogar essa peça
                 edges = self.in_table[0].values[0].value, self.in_table[len(self.in_table) - 1].values[1].value
                 pieceToSwitch = self.hand.pop()
                 self.updatePieces(-1)
@@ -199,15 +198,15 @@ class Player:
         return res
 
     def validate(self, piece, last_table):
-        valid_play = [None]*2
+        valid_play = [None] * 2
         if last_table:
             for piece_in_table in last_table:
                 if piece == piece_in_table:
-                    valid_play[0] = False   #illegal move, piece already played in table
+                    valid_play[0] = False  # illegal move, piece already played in table
                     break
                 else:
                     valid_play[0] = True
-        else: 
+        else:
             valid_play[0] = True
         for piece_in_hand in self.hand:
             if piece == piece_in_hand:
@@ -216,10 +215,11 @@ class Player:
             else:
                 valid_play[1] = True
 
-        if valid_play[0] == valid_play[1] == True:
-            return True   #legal play
+        if valid_play[0] is True or valid_play[1] is True:
+            return True  # legal play
         else:
-            return False  #ilegal play
+            return False  # ilegal play
+
 
 class Piece:
     values = []
