@@ -563,14 +563,15 @@ class Message:
             msg.update({"signed_piece": piece_signature})
         return msg
 
-    def _handle_rcv_game_properties(self):
+    def _handle_validate_this_play(self):
+        msg = {"action": "play_piece_ep"}
         self.player.nplayers = self.response.get("nplayers")
         self.player.npieces = self.response.get("npieces")
         self.player.pieces_per_player = self.response.get("pieces_per_player")
         self.player.in_table = self.response.get("in_table")
-        player_name = self.response.get("next_player")
+        last_table = self.request.get("last_table")
 
-        if "signed_piece" in self.response and self.response.get("last_player") != self.player.name:
+        if self.response.get("last_player") != self.player.name:
             print(Colors.Yellow + "Validating last played piece signature" + Colors.Color_Off)
             signed_piece = self.response.get("signed_piece")
             last_piece_played = self.response.get("last_piece")
@@ -581,10 +582,22 @@ class Message:
                 exit(-1)
             print(Colors.Green + "Last play signature is valid!" + Colors.Color_Off)
 
-            if (self.player.validate(last_piece_played)):
-                print("Legal Play")
+            if (self.player.validate(last_piece_played, last_table)):
+                print("I don't know if the player cheated!")
+                msg.update({"player_cheated": False})
             else:
                 print("Cheated!")
+                msg.update({"player_cheated": True})
+        
+        return msg 
+
+
+    def _handle_rcv_game_properties(self):
+        self.player.nplayers = self.response.get("nplayers")
+        self.player.npieces = self.response.get("npieces")
+        self.player.pieces_per_player = self.response.get("pieces_per_player")
+        self.player.in_table = self.response.get("in_table")
+        player_name = self.response.get("next_player")
 
         if self.response.get("next_player") == self.player.name:
             player_name = Colors.BRed + "YOU" + Colors.Color_Off
@@ -642,10 +655,9 @@ class Message:
                     winner = player
                 elif score_history[winner] > score_history[player]:
                     winner = player
-            score = sum(hand_score
-                        for player_name in score_history
-                        for hand_score in score_history[player_name]
-                        if player_name != winner)
+            for player_name in score_history:
+                if player_name != winner:
+                    score += score_history[player_name]
         else:
             winner = self.response.get("winner")
             for player_name in remaining_hands:
@@ -662,7 +674,8 @@ class Message:
         return msg
 
     def _handle_reveal_everything(self):
-        msg = {"action": "validate_game", "tile_keys": self.player.randomized_tuple_mapping,
+        next_action = self.response.get("next_act")
+        msg = {"action": next_action, "tile_keys": self.player.randomized_tuple_mapping,
                'hand_commit_confirmation': self.player.hand_commit.publishConfirmation(),
                "remaining_hand": self.player.hand, "collected_keys": self.player.collected_keys}
         return msg
@@ -812,6 +825,11 @@ class Message:
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "insert_in_hand":
             response = self._handle_insert_in_hand()
+            message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
+                              self.aes_cipher)
+            self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
+        elif action == "validate_this_play":
+            response = self._handle_validate_this_play()
             message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
                               self.aes_cipher)
             self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)

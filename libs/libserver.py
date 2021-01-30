@@ -513,7 +513,7 @@ class Message:
         return msg
 
     def _handle_play_piece(self, player):
-        next_p = self.game.nextPlayer()
+        self.game.GameEnded = self.request.get("win")
         if self.request.get("piece") is not None:
             signed_piece = self.request.get("signed_piece")
             print(Colors.Yellow + "Validating Play Signature..." + Colors.Color_Off)
@@ -526,6 +526,8 @@ class Message:
             print(Colors.Green + "Play Signature validated!" + Colors.Color_Off)
             self.game.players_played_pieces[self.player_nickname].append(self.request.get("piece"))
 
+            last_table = self.game.deck.in_table.copy()
+
             player.nopiece = False
             player.updatePieces(-1)
             if self.request.get("edge") == 0:
@@ -537,19 +539,46 @@ class Message:
         print("player " + player.name + " played " + str(self.request.get("piece")))
         print("in table -> " + ' '.join(map(str, self.game.deck.in_table)) + "\n")
 
-        if self.request.get("win"):
-            if player.checkifWin():
-                self.game.players_ready = False
-                print(Colors.BGreen + " WINNER " + player.name + Colors.Color_Off)
-                self.game.game_winner = player.name
-                msg = {"action": "reveal_everything"}
+            
+        if "signed_piece" in self.request:
+            msg = {"action": "validate_this_play"}
+            msg.update({"last_piece": self.request.get("piece")})
+            msg.update({"last_player": self.player_nickname})
+            msg.update({"signed_piece": self.request.get("signed_piece")})
+            msg.update({"last_table": last_table})
         else:
             msg = {"action": "rcv_game_properties"}
-            if "signed_piece" in self.request:
-                msg.update({"last_piece": self.request.get("piece")})
-                msg.update({"last_player": self.player_nickname})
-                msg.update({"signed_piece": self.request.get("signed_piece")})
 
+        msg.update(self.game.toJson())
+        self.send_all(msg)
+        return msg
+
+    def _handle_play_piece_epilogue(self, player):
+        self.game.players_waiting += 1
+
+        if self.request.get("player_cheated"):
+            self.game.player_cheated = True 
+        
+        if self.game.players_waiting >= self.game.nplayers:
+            self.game.players_waiting = 0
+            if self.game.player_cheated:
+                self.game.players_ready = False
+                print(Colors.Red + "There has been a protest. Going to check if player cheated!" + Colors.Color_Off)
+                msg = {"action": "reveal_everything", "next_act": "validate_protest"}
+            else:
+                if self.game.GameEnded:
+                    if player.checkifWin():
+                        self.game.players_ready = False
+                        print(Colors.BGreen + " WINNER " + player.name + Colors.Color_Off)
+                        self.game.game_winner = player.name
+                        msg = {"action": "reveal_everything", "next_act": "validate_game"}
+                else:
+                    self.game.nextPlayer()
+                    msg = {"action": "rcv_game_properties"}
+        else:
+            return {"action": "wait", "msg": Colors.Yellow + "Wait for other players" + Colors.Color_Off}
+
+        
         msg.update(self.game.toJson())
         self.send_all(msg)
         return msg
@@ -589,6 +618,9 @@ class Message:
                 if not verifyHandCommit(self.game.players_commits[player_name][0],
                                         self.game.players_commits_confirmations[player_name]):
                     print(Colors.Red + player_name + " Sent an Invalid Hand Commit" + Colors.Color_Off)
+                    msg = {"action": "disconnect"}
+                    self.send_all(msg)
+                    return msg
                 else:
                     print(Colors.Green + player_name + " Sent a valid Hand Commit" + Colors.Color_Off)
 
@@ -636,7 +668,9 @@ class Message:
                                       type(key_tuple) == tuple]
                         if not key_tuples:
                             print(Colors.Red, player_name, "has no keys", Colors.Color_Off)
-                            exit(-1)
+                            msg = {"action": "disconnect"}
+                            self.send_all(msg)
+                            return msg
 
                         player_has_piece = False
                         for d_tuple in key_tuples:
@@ -652,7 +686,9 @@ class Message:
 
                         if not player_has_piece:
                             print(Colors.Red, player_name, "doesn't have ", tile, "keys", Colors.Color_Off)
-                            exit(-1)
+                            msg = {"action": "disconnect"}
+                            self.send_all(msg)
+                            return msg
                         print(Colors.Green, player_name, "has ", tile, "keys", Colors.Color_Off)
 
                 print(Colors.Green + player_name + " played only valid tiles" + Colors.Color_Off)
@@ -666,7 +702,113 @@ class Message:
 
         else:
             return {"action": "wait", "msg": Colors.Green + "Wait for another players" + Colors.Color_Off}
+    
+    def _handle_validate_protest(self):
+        self.game.players_waiting += 1
+        self.game.players_commits_confirmations[self.player_nickname] = self.request.get("hand_commit_confirmation")
+        self.game.deck.tile_keys_per_player[self.player_nickname] = self.request.get("tile_keys")
+        self.game.player_initial_hands[self.player_nickname] = []
+        self.game.players_collected_key[self.player_nickname] = self.request.get("collected_keys")
+        self.game.players_remaining_hands[self.player_nickname] = self.request.get("remaining_hand")
 
+
+        if self.game.players_waiting >= self.game.nplayers:
+            self.game.players_waiting = 0
+
+            cheater_name = self.game.currentPlayer().name
+
+            print(Colors.Yellow, "Checking if", cheater_name, "cheated!", Colors.Color_Off)
+
+
+            if not verifyHandCommit(self.game.players_commits[cheater_name][0],
+                                        self.game.players_commits_confirmations[cheater_name]):
+                print(Colors.Red + cheater_name + " Sent an Invalid Hand Commit" + Colors.Color_Off)
+                print(Colors.Red + cheater_name + " is a cheater!" + Colors.Color_Off)
+                msg = {"action": "disconnect"}
+                self.send_all(msg)
+                return msg
+            else:
+                print(Colors.Green + cheater_name + " Sent a valid Hand Commit" + Colors.Color_Off)
+
+            # Decrypt all tiles in hand commit
+            player_encrypted_tiles = self.game.players_commits_confirmations[cheater_name][1]
+
+            for tile in player_encrypted_tiles:
+                tile_to_decrypt = tile
+                while True:
+                    current_player_key = self.game.randomization_order[-1]
+                    current_key_pairs = self.game.deck.tile_keys_per_player[current_player_key]
+
+                    key_tuple_dict = {}
+
+                    key_to_use = [keys for keys in current_key_pairs.keys() if
+                                    current_key_pairs[keys][0] in tile_to_decrypt]
+
+                    for key in key_to_use:
+                        key_tuple_dict[current_key_pairs[key]] = key
+
+                    for tuple_piece in key_tuple_dict:
+                        if tile_to_decrypt == tuple_piece[0]:
+                            decipher = AESCipher(key_tuple_dict[tuple_piece])
+                            deciphered_piece = pickle.loads(decipher.decrypt_aes_gcm(tuple_piece))
+
+                    tile_to_decrypt = deciphered_piece
+                    self.game.randomization_order.rotate(1)
+
+                    if self.game.randomization_order[-1] == self.game.first_in_randomization:
+                        tile_index, tile = tile_to_decrypt
+                        translated_tiles = self.game.deck.deck[tile_index]
+                        self.game.player_initial_hands[cheater_name].append(translated_tiles)
+                        break
+
+            player_played_pieces = self.game.players_played_pieces[cheater_name]
+            player_pieces_owned = player_played_pieces + self.game.players_remaining_hands[cheater_name]
+            for tile in player_pieces_owned:
+                if tile not in self.game.player_initial_hands[cheater_name]:
+                    print(Colors.Red + cheater_name + " owns a piece not in his initial hand" + Colors.Color_Off)
+                    print(Colors.Yellow + " Checking if player has the keys to" + str(tile) + Colors.Color_Off)
+                    key_tuples = [key_tuple for key_tuple in
+                                    list(self.game.players_collected_key[cheater_name].keys()) if
+                                    type(key_tuple) == tuple]
+                    if not key_tuples:
+                        print(Colors.Red, cheater_name, "has no keys", Colors.Color_Off)
+                        print(Colors.Red + cheater_name + " is a cheater!" + Colors.Color_Off)
+                        msg = {"action": "disconnect"}
+                        self.send_all(msg)
+                        return msg
+
+                    player_has_piece = False
+                    for d_tuple in key_tuples:
+                        tuple_to_check = list(self.game.players_collected_key[cheater_name][d_tuple].keys())[-1]
+                        key = self.game.players_collected_key[cheater_name][d_tuple][tuple_to_check]
+                        decipher = AESCipher(key)
+                        anon_tile_to_check = pickle.loads(decipher.decrypt_aes_gcm(tuple_to_check))
+                        tile_to_check = self.game.deck.deck[anon_tile_to_check[0]]
+
+                        if tile_to_check == tile:
+                            player_has_piece = True
+                            break
+
+                    if not player_has_piece:
+                        print(Colors.Red, cheater_name, "doesn't have ", tile, "keys", Colors.Color_Off)
+                        print(Colors.Red + cheater_name + " is a cheater!" + Colors.Color_Off)
+                        msg = {"action": "disconnect"}
+                        self.send_all(msg)
+                        return msg
+                    print(Colors.Green, cheater_name, "has ", tile, "keys", Colors.Color_Off)
+
+            print(Colors.Green + cheater_name + " played only valid tiles" + Colors.Color_Off)
+
+            print(Colors.Green + "Player" + cheater_name + "didn't cheat!" + Colors.Color_Off)
+            
+            msg = {"action": "disconnect"}
+            self.send_all(msg)
+            return msg
+        else:
+            return {"action": "wait", "msg": Colors.Yellow + "Wait for other players" + Colors.Color_Off}
+
+            
+    
     def _handle_score_report(self):
         self.game.players_waiting += 1
         self.game.players_calculated_scores[self.player_nickname] = self.request.get("score")
@@ -674,7 +816,6 @@ class Message:
 
         if self.game.players_waiting >= self.game.nplayers:
             self.game.players_waiting = 0
-            print("score", self.game.players_calculated_scores)
             score_history = {}
             score = 0
             self.game.score = 0
@@ -690,10 +831,9 @@ class Message:
                         winner = player
                     elif score_history[winner] > score_history[player]:
                         winner = player
-                self.game.score = sum(hand_score
-                                      for player_name in score_history
-                                      for hand_score in score_history[player_name]
-                                      if player_name != winner)
+                for player_name in score_history:
+                    if player_name != winner:
+                        self.game.score += score_history[player_name]
             else:
                 self.game.score = 0
                 winner = self.game.game_winner
@@ -795,6 +935,9 @@ class Message:
         elif action == "validate_game":
             content = self._handle_validate_game()
             self._set_selector_events_mask("r")
+        elif action == "validate_protest":
+            content = self._handle_validate_protest()
+            self._set_selector_events_mask("r")
         elif action == "score_report":
             content = self._handle_score_report()
             self._set_selector_events_mask("r")
@@ -826,6 +969,9 @@ class Message:
 
             if action == "revealed_key_for_piece":
                 content = self._handle_revealed_key_for_piece()
+                self._set_selector_events_mask("r")
+            elif action == "play_piece_ep":
+                content = self._handle_play_piece_epilogue(self.game.currentPlayer())
                 self._set_selector_events_mask("r")
 
         response = {
