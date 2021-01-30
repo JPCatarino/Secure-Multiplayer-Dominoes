@@ -17,7 +17,10 @@ class Game:
         self.players_commits_confirmations = {}
         self.players_played_pieces = {}
         self.player_initial_hands = {}
+        self.players_remaining_hands = {}
         self.players_collected_key = {}
+        self.players_calculated_scores = {}
+        self.players_possible_winner = {}
         self.game_winner = None
         self.init_distribution = True
         self.next_action = "play"
