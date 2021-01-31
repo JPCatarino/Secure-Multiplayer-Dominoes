@@ -608,6 +608,7 @@ class Message:
 
         if self.response.get("next_player") == self.player.name:
             player_name = Colors.BRed + "YOU" + Colors.Color_Off
+        print("deck -> ", len(self.player.pseudo_starting_stock), "pieces remaining")
         print("hand -> " + ' '.join(map(str, self.player.hand)))
         print("in table -> " + ' '.join(map(str, self.response.get("in_table"))) + "\n")
         print("Current player ->", player_name)
