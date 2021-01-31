@@ -169,14 +169,15 @@ class Message:
         server_cert = cryptography.x509.load_pem_x509_certificate(server_cert_PEM, default_backend())
         server_pub_key_PEM = server_cert.public_key().public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
         nickname = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))  # input(data["msg"])
-        signature, data = self.cc.signData(nickname)
+        #signature, data = self.cc.signData(nickname)
         cert = self.cc.get_signature_cert()
         # cc_pubKey = self.cc.get_pubKey()
         print(Colors.BYellow + "Your name is " + Colors.BBlue + nickname + Colors.Color_Off)
-        msg = {"action": "req_login", "pubkey": self.keychain.exportPubKey(), "msg": nickname,
-               "signature": signature, "cert": cert, "data": data}
+        msg = {"action": "req_login", "pubkey": self.keychain.exportPubKey(), "msg": nickname, "cert": cert}
+        signature, data = self.cc.signData(pickle.dumps(msg))
+        msg.update({"signature": signature, "data": data})
         self.player = Player(nickname, self.sock, self.cheater)
-        self.player.server_pub_key = readPublicKeyFromPEM(server_pub_key_PEM)       
+        self.player.server_pub_key = readPublicKeyFromPEM(server_pub_key_PEM)          
         return msg
 
     def _handle_you_host(self):
@@ -770,7 +771,7 @@ class Message:
             winner = Colors.BRed + "YOU" + Colors.Color_Off
             print(Colors.BGreen + "End GAME, THE WINNER IS: " + winner)
             print(Colors.ICyan + "Your Score: " + str(score) + Colors.Color_Off)
-            signature, data = self.cc.signData(str(score))
+            signature, data = self.cc.signData(pickle.dumps(str(score)))
             msg = {"action": "assign_score", "signed_score": signature, "data": data, "player": self.player.name}
             return msg
         else:
