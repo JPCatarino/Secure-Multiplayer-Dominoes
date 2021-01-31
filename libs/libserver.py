@@ -251,14 +251,16 @@ class Message:
                         for key in pair_dict:
                             for new_keys in pair_dict[key]:
                                 sub_player_PEM[new_keys] = self.player_keys_dict_PEM[new_keys]
-                            msg = {"action": "key_exchange", "session_keys": sub_player_PEM,
+                            signed_session_keys = self.keychain.sign(pickle.dumps(sub_player_PEM))
+                            msg = {"action": "key_exchange", "session_keys": sub_player_PEM, "signed_session_keys": signed_session_keys,
                                    "msg": Colors.BYellow + "Establishing players secure session...exchanging keys..." + Colors.Color_Off}
                             self.send_to_player(key, msg)
                             sub_player_PEM = {}
-
+                        
+                        signed_pub_keys = self.keychain.sign(pickle.dumps(self.player_keys_dict_PEM))
                         msg = {"action": "send_pub_keys",
                                "msg": Colors.BYellow + "Establishing players secure session..." + Colors.Color_Off,
-                               "pub_keys": self.player_keys_dict_PEM}
+                               "pub_keys": self.player_keys_dict_PEM, "signed_pub_keys": signed_pub_keys}
                         self.send_all(msg)
                     return msg
             else:
@@ -269,14 +271,17 @@ class Message:
     def _handle_aes_exchange(self):
         if "aes_keys" in self.request:
             aes_keys = self.request.get("aes_keys")
+            signed_aes_keys = self.request.get("signed_aes_keys")
             list_of_players = aes_keys.keys()
             for player in list_of_players:
                 for player_send in aes_keys[player]:
                     print(Colors.Yellow + "Session Set-up between " + self.player_nickname + " and " + player_send,
                           Colors.Color_Off)
                     temp = {}
+                    temp_sign = {}
                     temp[player] = aes_keys[player].get(player_send)
-                    msg = {"action": "receiving_aes", "aes_key": temp, "player_receive": player_send}
+                    temp_sign[player] = signed_aes_keys[player].get(player_send)
+                    msg = {"action": "receiving_aes", "aes_key": temp, "signed_aes_key": temp_sign, "player_receive": player_send}
                     self.send_all(msg)
         msg = {"action": "keys_exchanged",
                "msg": Colors.BYellow + "Keys have been exchanged!" + Colors.Color_Off}

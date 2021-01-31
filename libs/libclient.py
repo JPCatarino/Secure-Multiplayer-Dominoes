@@ -194,6 +194,7 @@ class Message:
 
     def _handle_new_player(self):
         if "session_key" in self.response:
+            print(Colors.Yellow, "Checking if session key message was compromised", Colors.Color_Off)
             if not self.keychain.verify_sign(self.response.get("session_key"), self.response.get("signed_session_key"), self.player.server_pub_key):
                 print(Colors.Red, "Messages has been compromised. Shutting Down!", Colors.Color_Off)
                 exit(-1)
@@ -211,6 +212,13 @@ class Message:
         if "session_keys" in self.response:
             aes_exchange_keys = {}
             aes_keys = {}
+            signed_aes_exchange_keys = {}
+            signed_aes_keys = {}
+            print(Colors.Yellow, "Checking if server message was compromised", Colors.Color_Off)
+            if not self.keychain.verify_sign(pickle.dumps(self.response.get("session_keys")), self.response.get("signed_session_keys"), self.player.server_pub_key):
+                print(Colors.Red, "Key Exchange has been compromised. Shutting Down!", Colors.Color_Off)
+                exit(-1)
+            print(Colors.BGreen, "Key Exchange integrity not compromised", Colors.Color_Off)
             players_pub_keys = self.response.get("session_keys")
             list_of_keys = list(players_pub_keys.keys())
             for keys in list_of_keys:
@@ -219,17 +227,25 @@ class Message:
                     encrypted_secret = self.keychain.encrypt(self.exchange_aes.secret,
                                                              readPublicKeyFromPEM(players_pub_keys[keys]))
                     aes_exchange_keys[keys] = encrypted_secret
+                    signed_aes_exchange_keys[keys] = self.keychain.sign(encrypted_secret)
                     aes_keys[self.player.name] = aes_exchange_keys
+                    signed_aes_keys[self.player.name] = signed_aes_exchange_keys
                     self.player.aes_player_keys_dec[keys] = self.exchange_aes
-            msg = {"action": "aes_exchange", "aes_keys": aes_keys}
+            msg = {"action": "aes_exchange", "aes_keys": aes_keys, "signed_aes_keys": signed_aes_keys}
         return msg
 
     def _handle_receiving_aes(self):
         if "aes_key" in self.response:
             aes_key = self.response.get("aes_key")
+            signed_aes_key = self.response.get("signed_aes_key")
             print(aes_key)
             if self.player.name in self.response.get("player_receive"):
                 for key in aes_key:
+                    print(Colors.Yellow, "Checking if session key between clients message was compromised", Colors.Color_Off)
+                    if not self.keychain.verify_sign(aes_key[key], signed_aes_key[key], readPublicKeyFromPEM(self.player.player_pub_keys[key])):
+                        print(Colors.Red, key, "session key has been compromised. Shutting Down!", Colors.Color_Off)
+                        exit(-1)
+                    print(Colors.BGreen, key, "session key not compromised", Colors.Color_Off)
                     self.player.aes_player_keys[key] = aes_key[key]
                     print(aes_key[key])
                     print(self.player.aes_player_keys[key])
@@ -765,6 +781,11 @@ class Message:
             self._handle_new_player()
         elif action == "send_pub_keys":
             print(self.response.get("msg"))
+            print(Colors.Yellow, "Checking if server message was compromised", Colors.Color_Off)
+            if not self.keychain.verify_sign(pickle.dumps(self.response.get("pub_keys")), self.response.get("signed_pub_keys"), self.player.server_pub_key):
+                print(Colors.Red, "Public Keys Exchange has been compromised. Shutting Down!", Colors.Color_Off)
+                exit(-1)
+            print(Colors.BGreen, "Public Keys Exchange integrity not compromised", Colors.Color_Off)
             self.player.player_pub_keys = self.response.get('pub_keys')
         elif action == "key_exchange":
             response = self._handle_key_exchange()
