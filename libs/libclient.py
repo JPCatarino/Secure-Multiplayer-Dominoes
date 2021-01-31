@@ -293,7 +293,8 @@ class Message:
             new_cipher = AESCipher()
             ciphertext, nonce, auth_tag = new_cipher.encrypt_aes_gcm(pickle.dumps(piece))
             # If collision exists, generates new key encrypts again
-            while ciphertext in self.player.randomized_tuple_mapping.values():
+            while (ciphertext, nonce, auth_tag) in self.player.randomized_tuple_mapping.values():
+                print(Colors.Red, "Cipher already existed. Generating a new one", Colors.Color_Off)
                 new_cipher = AESCipher()
                 ciphertext, nonce, auth_tag = new_cipher.encrypt_aes_gcm(pickle.dumps(piece))
 
@@ -344,7 +345,7 @@ class Message:
         players_nicks = list(self.player.aes_player_keys_dec.keys())
 
         if len(self.player.encrypted_hand) < self.player.npieces:
-            if random.random() < 0.60:
+            if random.random() < 0.05:
                 print(Colors.Green + "Selecting a piece" + Colors.Color_Off)
                 random.shuffle(pseudo_deck)
                 padding.append(os.urandom(sys.getsizeof(pseudo_deck[-1])))
@@ -513,7 +514,7 @@ class Message:
         players_nicks = list(self.player.aes_player_keys_dec.keys())
 
         if len(self.player.encrypted_hand) > 0:
-            if random.random() < 0.60:
+            if random.random() < 0.05:
                 print(Colors.BGreen + "Adding Public Key To Array" + Colors.Color_Off)
                 padding.pop()
                 padding.insert(0, None)
