@@ -630,8 +630,8 @@ class Message:
 
     def _handle_pass_play(self, player):
         self.game.nextPlayer()
-        # If the player passed the previous move
-        if player.nopiece:
+        # If all players passed
+        if all([player.nopiece for player in self.game.players]):
             self.game.players_ready = False
             print("No piece END")
             self.game.game_winner = "TIE"
