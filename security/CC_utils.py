@@ -84,12 +84,12 @@ def validate_certificates(cf_bytes, ccerts_bytes):
         root.set_flags(osc.X509StoreFlags.CRL_CHECK_ALL)
 
         validator.verify_certificate()
-        print('coolio')
+        print('Certificate Validated!')
         
         return True
 
     except Exception as e:
-        print('not coolio', e)
+        print('Not a valid certificate', e)
         return False
 
 
