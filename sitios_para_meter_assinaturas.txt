@@ -1,10 +1,10 @@
 LOGIN - 
 
     Certificado pubkey de cliente -> server
-    Assinar mensagem de estabelecimento de sessão server -> client
+    Assinar mensagem de estabelecimento de sessão server -> client - DONE
     Assinar session keys no estabelecimento de sessão client-> client (key_exchange/pub_keys)
-        -NOTA: Libserver e client
-    Assinar player_cheated
-    Assinar reveal_everything (Client/Servidor)
-    Assinar report_score e score_report
-    Assinar end_game
+        -NOTA: Libserver e client - DONE
+    Assinar player_cheated - DONE
+    Assinar reveal_everything (Client/Servidor) - DONE
+    Assinar report_score e score_report - DONE
+    Assinar end_game - DONE

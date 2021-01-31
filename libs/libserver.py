@@ -614,7 +614,7 @@ class Message:
         self.game.players_waiting += 1
 
         if "player_cheated" in self.request:
-            print(Colors.Yellow, "Checking if server message was compromised", Colors.Color_Off)
+            print(Colors.Yellow, "Checking if player cheating confirmation message was compromised", Colors.Color_Off)
             if not self.keychain.verify_sign(pickle.dumps(self.request.get("player_cheated")), self.request.get("signed_player_cheated"), self.player_keys_dict[self.player_nickname]):
                 print(Colors.Red, "Player cheating confirmation has been compromised. Shutting Down!", Colors.Color_Off)
                 exit(-1)
@@ -776,6 +776,7 @@ class Message:
             msg = {"action": "report_score", "winner": self.game.game_winner,
                    "remaining_hands": self.game.players_remaining_hands,
                    "hand_commits_confirmation": self.game.players_commits_confirmations}
+            msg.update({"signed_msg": self.keychain.sign(pickle.dumps(msg))})
             self.send_all(msg)
             return msg
 
@@ -896,6 +897,13 @@ class Message:
             return {"action": "wait", "msg": Colors.Yellow + "Wait for other players" + Colors.Color_Off}
 
     def _handle_score_report(self):
+        signed_msg = self.request.pop("signed_msg", None)
+
+        print(Colors.Yellow, "Checking if score report message from", self.player_nickname ,"was compromised", Colors.Color_Off)
+        if not self.keychain.verify_sign(pickle.dumps(self.request), signed_msg, self.player_keys_dict[self.player_nickname]):
+                print(Colors.Red, "Score Report has been compromised. Shutting Down!", Colors.Color_Off)
+                exit(-1)
+        print(Colors.BGreen, "Score Report action integrity not compromised", Colors.Color_Off)
         self.game.players_waiting += 1
         self.game.players_calculated_scores[self.player_nickname] = self.request.get("score")
         self.game.players_possible_winner[self.player_nickname] = self.request.get("possible_winner")
@@ -946,6 +954,7 @@ class Message:
             print(Colors.Green, "There's agreement over the score!", Colors.Color_Off)
 
             msg = {"action": "end_game", "winner": winner, "score": self.game.score}
+            msg.update({"signed_msg": self.keychain.sign(pickle.dumps(msg))})
             self.send_all(msg)
             return msg
         else:

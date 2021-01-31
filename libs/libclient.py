@@ -672,6 +672,14 @@ class Message:
         hand_commits_confirmations = self.response.get("hand_commits_confirmation")
         print(Colors.Yellow + "Validating all hand commits" + Colors.Color_Off)
 
+        signed_msg = self.response.pop("signed_msg", None)
+
+        print(Colors.Yellow, "Checking if Report Score message from server was compromised", Colors.Color_Off)
+        if not self.keychain.verify_sign(pickle.dumps(self.response), signed_msg, self.player.server_pub_key):
+                print(Colors.Red, "Report Score has been compromised. Shutting Down!", Colors.Color_Off)
+                exit(-1)
+        print(Colors.BGreen, "Report Score action integrity not compromised", Colors.Color_Off)
+
         for player_name in self.player.players_commits:
 
             if not verifyHandCommit(self.player.players_commits[player_name][0],
@@ -715,6 +723,7 @@ class Message:
         self.player.expected_winner = winner
         msg = {"action": "score_report", "score": self.player.calculated_score,
                "possible_winner": self.player.expected_winner}
+        msg.update({"signed_msg": self.keychain.sign(pickle.dumps(msg))})
         return msg
 
     def _handle_reveal_everything(self):
@@ -738,6 +747,15 @@ class Message:
         return msg
 
     def _handle_end_game(self):
+
+        signed_msg = self.response.pop("signed_msg", None)
+
+        print(Colors.Yellow, "Checking if End Game message from server was compromised", Colors.Color_Off)
+        if not self.keychain.verify_sign(pickle.dumps(self.response), signed_msg, self.player.server_pub_key):
+                print(Colors.Red, "End Game has been compromised. Shutting Down!", Colors.Color_Off)
+                exit(-1)
+        print(Colors.BGreen, "End Game action integrity not compromised", Colors.Color_Off)
+        
         winner = self.response.get("winner")
         score = self.response.get("score")
         print(Colors.Yellow, "Checking server score and winner", Colors.Color_Off)
