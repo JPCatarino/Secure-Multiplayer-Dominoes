@@ -293,7 +293,7 @@ class Message:
             new_cipher = AESCipher()
             ciphertext, nonce, auth_tag = new_cipher.encrypt_aes_gcm(pickle.dumps(piece))
             # If collision exists, generates new key encrypts again
-            while (ciphertext, nonce, auth_tag) in self.player.randomized_tuple_mapping.values():
+            while ciphertext in new_deck:
                 print(Colors.Red, "Cipher already existed. Generating a new one", Colors.Color_Off)
                 new_cipher = AESCipher()
                 ciphertext, nonce, auth_tag = new_cipher.encrypt_aes_gcm(pickle.dumps(piece))
