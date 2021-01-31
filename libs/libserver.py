@@ -197,7 +197,7 @@ class Message:
             cc_pub_key = cert.public_key()
             self.game.cc_pub_keys[self.player_nickname] = cc_pub_key
             print(self.request.get("signature"), self.request.get("data"))
-            if (validateSign(self.request.get("signature"), self.request.get("data"), cc_pub_key)):
+            if (validateSign(self.request.pop("signature"), self.request.pop("data"), cc_pub_key)):
                 print("VALID CERT AND SIGNATURE")
         else:
             print("Invalid Certificate! User will not be assigned")

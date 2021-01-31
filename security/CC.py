@@ -38,7 +38,7 @@ class CitizenCard:
 
         for slot in self.slots:
             if 'CARTAO DE CIDADAO' in self.pkcs11.getTokenInfo(slot).label:
-                data = bytes(data_to_sign, 'utf-8')
+                data = data_to_sign
 
                 session = self.pkcs11.openSession(slot)
 
