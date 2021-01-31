@@ -654,6 +654,7 @@ class Message:
         if self.response.get("winner") == "TIE":
             winner = None
             for player_name in remaining_hands:
+                score = 0
                 for piece in remaining_hands[player_name]:
                     score += piece.values[0].value + piece.values[1].value
                 score_history[player_name] = score
@@ -662,6 +663,7 @@ class Message:
                     winner = player
                 elif score_history[winner] > score_history[player]:
                     winner = player
+            score = 0
             for player_name in score_history:
                 if player_name != winner:
                     score += score_history[player_name]
@@ -676,8 +678,8 @@ class Message:
         print(Colors.Green, "I expect the score to be ", score, Colors.Color_Off)
         self.player.calculated_score = score
         self.player.expected_winner = winner
-        msg = {"action": "score_report", "score": score,
-               "possible_winner": self.response.get("winner")}
+        msg = {"action": "score_report", "score": self.player.calculated_score,
+               "possible_winner": self.player.expected_winner}
         return msg
 
     def _handle_reveal_everything(self):

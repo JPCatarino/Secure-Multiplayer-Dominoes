@@ -133,7 +133,8 @@ class Message:
 
     def _write(self):
         if self._send_buffer:
-            print("sending", repr(self._send_buffer), "to", self.addr)
+            #print("sending", repr(self._send_buffer), "to", self.addr)
+            time.sleep(0.1)
             try:
                 # Should be ready to write
                 sent = self.sock.send(self._send_buffer)
@@ -144,7 +145,8 @@ class Message:
                 self._send_buffer = self._send_buffer[sent:]
 
     def forced_write(self, message):
-        print("sending", message, "to", self.addr)
+        #print("sending", message, "to", self.addr)
+        time.sleep(0.1)
         try:
             # Should be ready to write
             buffer = b""
@@ -866,6 +868,7 @@ class Message:
             if self.game.game_winner == "TIE":
                 winner = None
                 for player_name in self.game.players_remaining_hands:
+                    score = 0
                     for piece in self.game.players_remaining_hands[player_name]:
                         score += piece.values[0].value + piece.values[1].value
                     score_history[player_name] = score
@@ -885,6 +888,8 @@ class Message:
                         for piece in self.game.players_remaining_hands[player_name]:
                             self.game.score += piece.values[0].value + piece.values[1].value
 
+            print(Colors.Green, "I expect the winner to be ", winner, Colors.Color_Off)
+            print(Colors.Green, "I expect the score to be ", self.game.score, Colors.Color_Off)
             print(Colors.Yellow, "Checking if players agree with winner", Colors.Color_Off)
             for possible_winner in self.game.players_possible_winner.values():
                 if possible_winner != winner:
