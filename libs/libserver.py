@@ -578,6 +578,7 @@ class Message:
                 print(Colors.Red + "I think this player is a cheater. Going to check!" + Colors.Color_Off)
                 self.game.players_ready = False
                 msg = {"action": "reveal_everything", "next_act": "validate_protest"}
+                msg.update({"signed_action": self.keychain.sign(pickle.dumps(msg.get("action")))})
                 self.send_all(msg)
                 return msg
 
@@ -612,6 +613,13 @@ class Message:
     def _handle_play_piece_epilogue(self, player):
         self.game.players_waiting += 1
 
+        if "player_cheated" in self.request:
+            print(Colors.Yellow, "Checking if server message was compromised", Colors.Color_Off)
+            if not self.keychain.verify_sign(pickle.dumps(self.request.get("player_cheated")), self.request.get("signed_player_cheated"), self.player_keys_dict[self.player_nickname]):
+                print(Colors.Red, "Player cheating confirmation has been compromised. Shutting Down!", Colors.Color_Off)
+                exit(-1)
+            print(Colors.BGreen, "Player cheating confirmation integrity not compromised", Colors.Color_Off)
+        
         if self.request.get("player_cheated"):
             self.game.player_cheated = True
 
@@ -621,6 +629,7 @@ class Message:
                 self.game.players_ready = False
                 print(Colors.Red + "There has been a protest. Going to check if player cheated!" + Colors.Color_Off)
                 msg = {"action": "reveal_everything", "next_act": "validate_protest"}
+                msg.update({"signed_action": self.keychain.sign(pickle.dumps(msg.get("action")))})
             else:
                 if self.game.GameEnded:
                     if player.checkifWin():
@@ -628,6 +637,7 @@ class Message:
                         print(Colors.BGreen + " WINNER " + player.name + Colors.Color_Off)
                         self.game.game_winner = player.name
                         msg = {"action": "reveal_everything", "next_act": "validate_game"}
+                        msg.update({"signed_action": self.keychain.sign(pickle.dumps(msg.get("action")))})
                 else:
                     self.game.nextPlayer()
                     msg = {"action": "rcv_game_properties"}
@@ -646,6 +656,7 @@ class Message:
             print("No piece END")
             self.game.game_winner = "TIE"
             msg = {"action": "reveal_everything", "next_act": "validate_game"}
+            msg.update({"signed_action": self.keychain.sign(pickle.dumps(msg.get("action")))})
             msg.update(self.game.toJson())
         # Update the variable nopiece so that the server can know if the player has passed the previous move
         else:
@@ -658,6 +669,13 @@ class Message:
         return msg
 
     def _handle_validate_game(self):
+        signed_msg = self.request.pop("signed_msg", None)
+
+        print(Colors.Yellow, "Checking if Validate Game message from", self.player_nickname ,"was compromised", Colors.Color_Off)
+        if not self.keychain.verify_sign(pickle.dumps(self.request), signed_msg, self.player_keys_dict[self.player_nickname]):
+                print(Colors.Red, "Validate Game action has been compromised. Shutting Down!", Colors.Color_Off)
+                exit(-1)
+        print(Colors.BGreen, "Validate Game action integrity not compromised", Colors.Color_Off)
         self.game.players_waiting += 1
         self.game.players_commits_confirmations[self.player_nickname] = self.request.get("hand_commit_confirmation")
         self.game.deck.tile_keys_per_player[self.player_nickname] = self.request.get("tile_keys")
@@ -765,6 +783,13 @@ class Message:
             return {"action": "wait", "msg": Colors.Green + "Wait for another players" + Colors.Color_Off}
 
     def _handle_validate_protest(self):
+        signed_msg = self.request.pop("signed_msg", None)
+
+        print(Colors.Yellow, "Checking if Validate Protest message from", self.player_nickname ,"was compromised", Colors.Color_Off)
+        if not self.keychain.verify_sign(pickle.dumps(self.request), signed_msg, self.player_keys_dict[self.player_nickname]):
+                print(Colors.Red, "Validate protest action has been compromised. Shutting Down!", Colors.Color_Off)
+                exit(-1)
+        print(Colors.BGreen, "Validate protest action integrity not compromised", Colors.Color_Off)
         self.game.players_waiting += 1
         self.game.players_commits_confirmations[self.player_nickname] = self.request.get("hand_commit_confirmation")
         self.game.deck.tile_keys_per_player[self.player_nickname] = self.request.get("tile_keys")

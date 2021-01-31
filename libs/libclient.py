@@ -629,6 +629,8 @@ class Message:
                 print("Cheated!")
                 msg.update({"player_cheated": True})
 
+            msg.update({"signed_player_cheated": self.keychain.sign(pickle.dumps(msg.get("player_cheated")))})
+
         return msg
 
     def _handle_rcv_game_properties(self):
@@ -716,6 +718,11 @@ class Message:
         return msg
 
     def _handle_reveal_everything(self):
+        print(Colors.Yellow, "Checking if reveal everything message was compromised", Colors.Color_Off)
+        if not self.keychain.verify_sign(pickle.dumps(self.response.get("action")), self.response.get("signed_action"), self.player.server_pub_key):
+                print(Colors.Red, "Reveal action has been compromised. Shutting Down!", Colors.Color_Off)
+                exit(-1)
+        print(Colors.BGreen, "Reveal action integrity not compromised", Colors.Color_Off)
         next_action = self.response.get("next_act")
         if next_action == "validate_protest":
             print(Colors.Red + "There has been a protest!\n" + Colors.Color_Off)
@@ -727,6 +734,7 @@ class Message:
         msg = {"action": next_action, "tile_keys": self.player.randomized_tuple_mapping,
                'hand_commit_confirmation': self.player.hand_commit.publishConfirmation(),
                "remaining_hand": self.player.hand, "collected_keys": self.player.collected_keys}
+        msg.update({"signed_msg": self.keychain.sign(pickle.dumps(msg))})
         return msg
 
     def _handle_end_game(self):
