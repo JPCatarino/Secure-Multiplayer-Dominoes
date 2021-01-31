@@ -111,7 +111,7 @@ class Message:
             events = selectors.EVENT_READ
         elif mode == "w":
             events = selectors.EVENT_WRITE
-            (print("setting write mode"))
+            #(print("setting write mode"))
         elif mode == "rw":
             events = selectors.EVENT_READ | selectors.EVENT_WRITE
         else:
@@ -235,7 +235,7 @@ class Message:
                         print(Colors.BIPurple + "The game is Full" + Colors.Color_Off)
                         sub_player_PEM = {}
                         pair_dict = {}
-
+                        print(Colors.Yellow + "Start Session set-up between clients" + Colors.Color_Off)
                         list_of_keys = self.player_keys_dict_PEM.keys()
                         list_of_pairs = [comb for comb in combinations(list_of_keys, 2)]
 
@@ -267,6 +267,7 @@ class Message:
             list_of_players = aes_keys.keys()
             for player in list_of_players:
                 for player_send in aes_keys[player]:
+                    print(Colors.Yellow + "Session Set-up between " + self.player_nickname + " and " + player_send, Colors.Color_Off)
                     temp = {}
                     temp[player] = aes_keys[player].get(player_send)
                     msg = {"action": "receiving_aes", "aes_key": temp, "player_receive": player_send}
@@ -277,6 +278,7 @@ class Message:
         return msg
 
     def _handle_finish_setup(self):
+        print(Colors.Red, "Waiting for host to start game", Colors.Color_Off)
         msg = {"action": "waiting_for_host",
                "msg": Colors.BRed + "Waiting for host to start the game" + Colors.Color_Off}
         return msg
@@ -285,6 +287,12 @@ class Message:
         self.game.deck.generate_pseudonymized_deck()
         self.game.randomization_list = list(player_messages.keys())
         self.game.randomization_order = list()
+
+        print(Colors.Green, "Pseudonymized Deck Generated", Colors.Color_Off)
+        print(self.game.deck.pseudo_deck)
+
+        print(Colors.BGreen, "Starting Randomization Stage", Colors.Color_Off)
+        print(Colors.BGreen, "Next in order ->", self.game.randomization_list[-1], Colors.Color_Off)
 
         msg_one = {"action": "randomization_stage",
                    "pseudo_deck": self.game.deck.pseudo_deck}
@@ -299,6 +307,8 @@ class Message:
         self.game.deck.pseudo_deck = self.request.get("deck")
 
         if len(self.game.randomization_list) != 0:
+            print(Colors.BGreen, "Next Randomization step", Colors.Color_Off)
+            print(Colors.BGreen, "Next in order ->", self.game.randomization_list[-1], Colors.Color_Off)
 
             msg_one = {"action": "randomization_stage",
                        "pseudo_deck": self.game.deck.pseudo_deck}
@@ -312,6 +322,7 @@ class Message:
             return msg_two
         else:
             # If randomization ended, skip to next stage
+            print(Colors.BGreen, "Randomization Ended, Starting Selection", Colors.Color_Off)
             msg_one = {"action": "start_selection_stage", "deck": self.game.deck.pseudo_deck,
                        "pieces_per_player": self.game.deck.pieces_per_player,
                        "stock_low": len(self.game.deck.pseudo_deck) - (
@@ -325,12 +336,14 @@ class Message:
             return msg_two
 
     def _handle_selection_stage_over(self):
+        print(Colors.Yellow + "Selection stage is over! Requesting hand commits!" + Colors.Color_Off)
         self.game.deck.init_stock = self.request.get("deck")
         msg = {'action': 'commit_hand'}
         self.send_all(msg)
         return msg
 
     def _handle_send_commit(self):
+        print(Colors.Green, self.player_nickname, "sent his hand commit!", Colors.Color_Off)
         self.game.players_commits[self.player_nickname] = self.request.get("commit")
 
         for player in self.game.players_commits:
@@ -343,6 +356,7 @@ class Message:
         if len(self.game.players_commits) < self.game.nplayers:
             return {'action': "wait", 'msg': Colors.BYellow + "Commits in progress" + Colors.Color_Off}
         else:
+            print(Colors.Green, "All hands commitments received!", Colors.Color_Off)
             msg = {'action': "validate_selection", "commits": self.game.players_commits,
                    "stock": self.game.deck.init_stock}
             self.send_all(msg)
@@ -366,6 +380,7 @@ class Message:
             return msg_two
 
     def _handle_revealed_keys(self):
+        print(Colors.Yellow, "Sending keys to reveal!", Colors.Color_Off)
         msg = {"action": "keys_to_reveal", "keys_dict": self.request.get("keys_dict")}
         self.send_all(msg)
         return {"action": "keys_sent", "msg": "Keys were sent"}
@@ -374,6 +389,7 @@ class Message:
         self.game.randomization_order.rotate(1)
         more = False
         if self.game.randomization_order[-1] != self.game.first_in_randomization:
+            print("Next in randomization order -> ", self.game.randomization_order[-1])
             more = True
 
         msg = {"action": "piece_key_to_reveal", "key_dict": self.request.get("key_dict"), "more": more}
@@ -387,9 +403,11 @@ class Message:
             self.game.randomization_order.rotate(1)
             self.game.players_waiting = 0
             if self.game.first_in_randomization != self.game.randomization_order[-1]:
+                print(Colors.Green, "Revelation is afoot!", Colors.Color_Off)
                 msg_one = {"action": "reveal_keys", 'msg': Colors.BYellow + "Revealing your keys" + Colors.Color_Off}
                 msg_two = {"action": "wait", 'msg': Colors.BYellow + "Revelation in Progress" + Colors.Color_Off}
                 self.game.randomization_order = deque(self.game.randomization_order)
+                print("Next in randomization order -> ", self.game.randomization_order[-1])
                 self.send_to_player(self.game.randomization_order[-1], msg_one)
                 self.send_all(msg_two)
                 return msg_two
@@ -490,6 +508,7 @@ class Message:
         return msg
 
     def _handle_request_piece_reveal(self, player):
+        print(Colors.Yellow, self.player_nickname, "Piece Reveal in Progress", Colors.Color_Off)
         if self.game.randomization_order[-1] == self.game.first_in_randomization:
             player.updatePieces(1)
             self.game.deck.init_stock = self.request.get("new_stock")
@@ -615,6 +634,7 @@ class Message:
             print("No piece END")
             self.game.game_winner = "TIE"
             msg = {"action": "reveal_everything", "next_act": "validate_game"}
+            msg.update(self.game.toJson())
         # Update the variable nopiece so that the server can know if the player has passed the previous move
         else:
             print("No piece")
@@ -904,7 +924,7 @@ class Message:
 
     def _create_response_json_content(self):
         # ADD HERE MORE MESSSAGES
-        print(self.request)
+        #print(self.request)
         action = self.request.get("action")
         if action == "hello":
             content = self._handle_hello()

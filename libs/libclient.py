@@ -96,7 +96,7 @@ class Message:
     def process_response(self):
         data = self._recv_buffer
         self.response = self._pickle_decode(data)
-        print("received response", repr(self.response), "from", self.addr)
+        #print("received response", repr(self.response), "from", self.addr)
         self._process_response_json_content()
         self._recv_buffer = b""
 
@@ -129,7 +129,7 @@ class Message:
 
     def _write(self):
         if self._send_buffer:
-            print("sending", repr(self._send_buffer), "to", self.addr)
+            #print("sending", repr(self._send_buffer), "to", self.addr)
             try:
                 # Should be ready to write
                 sent = self.sock.send(self._send_buffer)
@@ -254,6 +254,8 @@ class Message:
 
         self.player.randomized_tuple_mapping = {}
 
+        print(Colors.Yellow + "Ciphering each piece in deck" + Colors.Color_Off)
+
         for piece in deck:
             new_cipher = AESCipher()
             ciphertext, nonce, auth_tag = new_cipher.encrypt_aes_gcm(pickle.dumps(piece))
@@ -275,7 +277,10 @@ class Message:
         padding = self.response.get("padding")
         self.player.npieces = self.response.get("pieces_per_player")
 
+        print(Colors.Yellow + "Do you pick or pass?" + Colors.Color_Off)
+
         if random.random() < 0.05:
+            print(Colors.Green + "Selecting a piece" + Colors.Color_Off)
             random.shuffle(pseudo_deck)
             padding.append(os.urandom(sys.getsizeof(pseudo_deck[-1])))
             self.player.encrypted_hand.append(pseudo_deck.pop())
@@ -344,9 +349,12 @@ class Message:
         return msg
 
     def _handle_commit_hand(self):
+        print(Colors.Yellow, "Generating hand commitment with starting encrypted deck", Colors.Color_Off)
         self.player.hand_commit = HandCommit(self.player.encrypted_hand.copy())
 
         signed_commit = self.keychain.sign(pickle.dumps(self.player.hand_commit.publishCommit()))
+
+        print(Colors.Yellow, "Sending hand commitment", Colors.Color_Off)
 
         msg = {"action": 'send_commit', "commit": (self.player.hand_commit.publishCommit(), signed_commit)}
 
@@ -515,7 +523,7 @@ class Message:
             self.player.insertInHand(tile)
 
         print(Colors.Green + "Hand has been de-anonymized!" + Colors.Color_Off)
-        print("Hand ->", self.player.hand)
+        print("Hand -> " + ' '.join(map(str, self.player.hand)))
         return {"action": "ready_to_play"}
 
     def _handle_reveal_piece_key(self):
@@ -588,9 +596,8 @@ class Message:
             else:
                 print("Cheated!")
                 msg.update({"player_cheated": True})
-        
-        return msg 
 
+        return msg
 
     def _handle_rcv_game_properties(self):
         self.player.nplayers = self.response.get("nplayers")
@@ -675,6 +682,13 @@ class Message:
 
     def _handle_reveal_everything(self):
         next_action = self.response.get("next_act")
+        if next_action == "validate_protest":
+            print(Colors.Red + "There has been a protest!\n" + Colors.Color_Off)
+        else:
+            print(Colors.Yellow + "Game Ended!\n" + Colors.Color_Off)
+            print("hand -> " + ' '.join(map(str, self.player.hand)))
+            print("end table -> " + ' '.join(map(str, self.response.get("in_table"))) + "\n")
+        print(Colors.Green + "Revealing everything to server!" + Colors.Color_Off)
         msg = {"action": next_action, "tile_keys": self.player.randomized_tuple_mapping,
                'hand_commit_confirmation': self.player.hand_commit.publishConfirmation(),
                "remaining_hand": self.player.hand, "collected_keys": self.player.collected_keys}
@@ -701,9 +715,9 @@ class Message:
         else:
             winner = Colors.BBlue + winner + Colors.Color_Off
             print(Colors.BGreen + "End GAME, THE WINNER IS: " + winner)
-            print(("{} {} {} earned {} points {}".format(Colors.ICyan, winner, Colors.ICyan, str(score), Colors.Color_Off)))
-        
-        
+            print(("{} {} {} earned {} points {}".format(Colors.ICyan, winner, Colors.ICyan, str(score),
+                                                         Colors.Color_Off)))
+
     def _handle_wait(self):
         print(self.response.get("msg"))
 
@@ -855,7 +869,7 @@ class Message:
             response = self._handle_end_game()
             if response is not None:
                 message = Message(self.selector, self.sock, self.addr, response, self.player, self.keychain, self.cc,
-                                self.aes_cipher)
+                                  self.aes_cipher)
                 self.selector.modify(self.sock, selectors.EVENT_WRITE, data=message)
         elif action == "wait":
             self._handle_wait()
