@@ -11,6 +11,9 @@ from functools import reduce
 sys.path.append(os.path.abspath(os.path.join('.')))
 sys.path.append(os.path.abspath(os.path.join('..')))
 
+import cryptography
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
 from dominoes.deck_utils import Player
 from utils import Colors as Colors
 from security.symCiphers import AESCipher
@@ -162,6 +165,9 @@ class Message:
         return dict(content=dict(action=action))
 
     def _handle_login(self):
+        server_cert_PEM = self.response.get("server_cert")
+        server_cert = cryptography.x509.load_pem_x509_certificate(server_cert_PEM, default_backend())
+        server_pub_key_PEM = server_cert.public_key().public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
         nickname = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))  # input(data["msg"])
         signature, data = self.cc.signData(nickname)
         cert = self.cc.get_signature_cert()
@@ -170,9 +176,15 @@ class Message:
         msg = {"action": "req_login", "pubkey": self.keychain.exportPubKey(), "msg": nickname,
                "signature": signature, "cert": cert, "data": data}
         self.player = Player(nickname, self.sock, self.cheater)
+        self.player.server_pub_key = readPublicKeyFromPEM(server_pub_key_PEM)       
         return msg
 
     def _handle_you_host(self):
+        print(Colors.Yellow, "Checking if session key message was compromised", Colors.Color_Off)
+        if not self.keychain.verify_sign(self.response.get("session_key"), self.response.get("signed_session_key"), self.player.server_pub_key):
+                print(Colors.Red, "Messages has been compromised. Shutting Down!", Colors.Color_Off)
+                exit(-1)
+        print(Colors.BGreen, "Message integrity not compromised", Colors.Color_Off)
         aes_secret = self.keychain.decrypt(self.response.get("session_key"))
         self.aes_cipher = AESCipher(aes_secret)
         print("Session", aes_secret)
@@ -182,6 +194,10 @@ class Message:
 
     def _handle_new_player(self):
         if "session_key" in self.response:
+            if not self.keychain.verify_sign(self.response.get("session_key"), self.response.get("signed_session_key"), self.player.server_pub_key):
+                print(Colors.Red, "Messages has been compromised. Shutting Down!", Colors.Color_Off)
+                exit(-1)
+            print(Colors.BGreen, "Message integrity not compromised", Colors.Color_Off)
             aes_secret = self.keychain.decrypt(self.response.get("session_key"))
             print("Session", aes_secret)
             self.aes_cipher = AESCipher(aes_secret)

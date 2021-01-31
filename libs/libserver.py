@@ -23,6 +23,7 @@ from itertools import combinations
 from security.CC_utils import validate_certificates, validateSign
 from collections import deque
 from security.CC import CitizenCard
+from security.selfsignedcerts import generate_selfsigned_cert
 
 # Main socket code from https://realpython.com/python-sockets/
 
@@ -176,7 +177,8 @@ class Message:
         return message
 
     def _handle_hello(self):
-        msg = {"action": "login", "msg": "Welcome to the server, what will be your name?"}
+        cert = generate_selfsigned_cert("server", None, self.keychain.keyPair.export_key())
+        msg = {"action": "login", "msg": "Welcome to the server, what will be your name?", "server_cert": cert}
         return msg
 
     def _handle_login(self):
@@ -206,7 +208,7 @@ class Message:
         player_messages[self.player_nickname] = self
         if not self.game.hasHost():  # There is no game for this tabla manager
             self.game.addPlayer(self.request.get("msg"), self.sock, self.game.deck.pieces_per_player)  # Adding host
-            msg = {"action": "you_host", "session_key": encrypted_secret,
+            msg = {"action": "you_host", "session_key": encrypted_secret, "signed_session_key": self.keychain.sign(encrypted_secret),
                    "msg": Colors.BRed + "You are the host of the game" + Colors.Color_Off}
             print("User " + Colors.BBlue + "{}".format(
                 self.request.get("msg")) + Colors.Color_Off + " has created a game, he is the first to join")
@@ -230,6 +232,7 @@ class Message:
                     # send info to all players
                     self.send_all(msg)
                     msg["session_key"] = encrypted_secret
+                    msg["signed_session_key"] = self.keychain.sign(encrypted_secret)
 
                     # check if table is full
                     if self.game.isFull():

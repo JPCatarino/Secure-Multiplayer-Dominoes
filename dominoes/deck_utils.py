@@ -14,6 +14,7 @@ class Player:
         self.hand_commit = []
         self.encrypted_hand = []
         self.server_aes_cipher = None
+        self.server_pub_key = None
         self.already_have_player_keys = False
         self.aes_player_keys = {}
         self.aes_player_keys_dec = {}
