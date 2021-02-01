@@ -131,15 +131,4 @@ def add_crl(root, cert, base=False, delta=False):
             crl = osc.load_crl(osc.FILETYPE_ASN1, load_from_url(url.value))
             root.add_crl(crl)
 
-""" if __name__ == '__main__':
-    CC = CitizenCard()
-    cert = CC.get_signature_cert()
-    f2 = open('CCCerts.crt', 'rb')
-    f2 = f2.read()
-    cert = CC.get_signature_cert()
-    validate_certificates(cert, f2)
-    signature, data = CC.signData("hello")
-    CC.validateSign(signature, data)
-    p = vlc.MediaPlayer("coolio.mp3")
-    while True:
-        p.play() """
+
