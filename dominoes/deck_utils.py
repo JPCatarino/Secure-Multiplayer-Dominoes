@@ -259,7 +259,7 @@ class Player:
             else:
                 valid_play[1] = True
 
-        if valid_play[0] is True or valid_play[1] is True:
+        if valid_play[0] is True and valid_play[1] is True:
             return True  # legal play
         else:
             return False  # ilegal play
